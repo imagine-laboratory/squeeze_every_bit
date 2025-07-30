@@ -1,0 +1,7 @@
+names:
+  0: pineapple 
+nc: 1
+path: .
+test: /content/drive/MyDrive/Research Piñas/Pineapple_dataset_yolo/test/images
+train: /content/drive/MyDrive/Research Piñas/Pineapple_dataset_yolo/train/images
+val: /content/drive/MyDrive/Research Piñas/Pineapple_dataset_yolo/val/images
