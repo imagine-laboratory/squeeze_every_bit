@@ -69,9 +69,6 @@ This will install:
 sudo apt install git  # For Debian/Ubuntu
 ```
 
-Here's a **simplified version** of the COCO dataset format section for your README, keeping it clear and concise while retaining essential information:
-
----
 
 ## 🗂️ Dataset Format (COCO Style)
 
