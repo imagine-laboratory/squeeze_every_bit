@@ -210,7 +210,7 @@ python methods.py [OPTIONS]
 | `--new-sample-size`        | `int`   | `224`               | Size of new samples after augmentation.                                     |
 | `--batch-size-labeled`     | `int`   | `1`                 | Batch size for labeled data (in semi-supervised learning).                  |
 | `--batch-size-unlabeled`   | `int`   | `4`                 | Batch size for unlabeled data (in semi-supervised learning).                |
-| `--method`                 | `str`   | `"None"`            | Method or model variant to use.                                             |
+| `--method`                 | `str`   | `"None"`            | Few shot method to use: `'samAlone'`, `'fewshot1'`, `'fewshot2'`, `'fewshotOOD'`, `'fewshotRelationalNetwork'`, `'fewshotMatching'`, `'fewshotBDCSPN'`, `'fewshotMahalanobis'`, `'ss'`                                           |
 | `--numa`                   | `int`   | `None`              | NUMA node to use (for CPU affinity).                                        |
 | `--output-folder`          | `str`   | `None`              | Folder to save outputs or checkpoints.                                      |
 | `--run-name`               | `str`   | `None`              | Name of the run/experiment.                                                 |
