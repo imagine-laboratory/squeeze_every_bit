@@ -251,7 +251,7 @@ python methods.py \
 
 ## 📖 Citation
 
-If you use this work in your research, please star ⭐ the repository and cite:
+If you find this repository useful, please star ⭐ the repository and cite:
 
 ```
 @inproceedings{squeeze_bit_insight,
