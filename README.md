@@ -257,6 +257,16 @@ For related work on training-free object detection for pineapple crops:
   doi={10.1109/BIP63158.2024.10885396}
 }
 ```
+```
+@inproceedings{fallas2023object,
+  title={Object detection in pineapple fields drone imagery using few shot learning and the segment anything model},
+  author={Fallas-Moya, Fabian and Calderon-Ramirez, Saul and Sadovnik, Amir and Qi, Hairong},
+  booktitle={2023 International Conference on Machine Learning and Applications (ICMLA)},
+  pages={1635--1642},
+  year={2023},
+  organization={IEEE}
+}
+```
 
 ---
 
