@@ -197,4 +197,4 @@ For related work on training-free object detection for pineapple crops:
 ---
 
 ## Acknowledgements
-This work was supported by We thank the National Center for High Technology of Costa Rica for access to the Kabré Cluster, the University of Costa Rica (project C4612), and ITCR's Postgraduate Office for supporting this publication.
+We thank the National Center for High Technology of Costa Rica for access to the Kabré Cluster, the University of Costa Rica (project C4612), and ITCR's Postgraduate Office for supporting this publication.
