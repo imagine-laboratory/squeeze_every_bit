@@ -247,9 +247,8 @@ If you use this work in your research, please star ⭐ the repository and cite:
 
 For related work on training-free object detection for pineapple crops:
 
-<summary>
+
 <a href="https://ieeexplore.ieee.org/abstract/document/10885396">Simple Object Detection Framework without Training</a> [<b>bib</b>]
-</summary>
 
 ```
 @inproceedings{simple_object_detection_framework_without_training,
@@ -262,10 +261,8 @@ For related work on training-free object detection for pineapple crops:
 }
 ```
 
-<summary>
-<a href="https://ieeexplore.ieee.org/document/10459891">Object detection in pineapple fields drone imagery using few shot learning and the segment anything model</a> [<b>bib</b>]
-</summary>
 
+<a href="https://ieeexplore.ieee.org/document/10459891">Object detection in pineapple fields drone imagery using few shot learning and the segment anything model</a> [<b>bib</b>]
 ```
 @inproceedings{fallas2023object,
   title={Object detection in pineapple fields drone imagery using few shot learning and the segment anything model},
