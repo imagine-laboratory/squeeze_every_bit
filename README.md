@@ -226,6 +226,21 @@ python methods.py [OPTIONS]
 | `--ood-validation-samples` | `int`   | `10`                | Number of OOD validation samples.                                           |
 | `--mahalanobis-lambda`     | `float` | `-1.0`              | Lambda parameter for Mahalanobis metric.                                    |
 
+### Fewshot Models Available
+
+#### 🧠 Few-Shot Model Options
+
+The code can be executed with one of the following few-shot model options passed as a parameter (e.g., `--method fewshot1`). Each corresponds to a different few-shot strategy:
+
+| Method Name                | Description                                                                                                                                                                                                                                                        |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `samAlone`                 | **SAM Alone**. This method performs object segmentation using one of several Segment Anything Models (SAM-H, HQ-SAM-H, MobileSAM, EdgeSAM, SlimSAM-50, or FastSAM), treating all region proposals as independent object hypotheses without class-level adaptation. |
+| `fewshot1` `fewshot2`      | **Euclidean Prototype**. Implements the [prototypical network](https://arxiv.org/abs/1703.05175) method, where class prototypes are computed as the mean of embedded support samples, and classification is done using Euclidean distance to these prototypes, for one class `fewshot1` and for two classes `fewshot2`.                    |
+| `ss`                       | **Selective Search (SS)**. A classical, non-deep learning region proposal method that uses hierarchical segmentation based on pixel intensity to generate object candidates. Useful as a baseline to compare against deep learning models.                         |
+| `fewshotOOD`               |  **Density Prototype**. This model extends the prototypical approach by estimating class prototypes using [density functions](https://ieeexplore.ieee.org/document/10459891), providing robustness for out-of-distribution (OOD) detection.                         |
+| `fewshotBDCSPN`            | **BD-CSPN**. Based on [Liu et al.](https://arxiv.org/abs/1911.10713), this approach modifies the prototypical method by dynamically refining class centroids.                                                                                  |
+| `fewshotMahalanobis`       | **Mahalanobis Distance Prototype**. This variation replaces Euclidean distance with Mahalanobis distance to account for feature covariance, enabling more adaptive decision boundaries.                                                                            |
+
 ### Example command
 
 ```bash
@@ -245,7 +260,7 @@ If you use this work in your research, please star ⭐ the repository and cite:
 }
 ```
 
-For related work on training-free object detection for pineapple crops:
+For related work on training-free object detection for agriculture applications:
 
 
 <a href="https://ieeexplore.ieee.org/abstract/document/10885396">Simple Object Detection Framework without Training</a> [<b>bib</b>]
