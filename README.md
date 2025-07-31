@@ -247,7 +247,11 @@ If you use this work in your research, please star ⭐ the repository and cite:
 
 For related work on training-free object detection for pineapple crops:
 
-```
+<details>
+<summary>
+<a href="https://ieeexplore.ieee.org/abstract/document/10885396">Simple Object Detection Framework without Training</a> (Simple Object Detection Framework without Training) [<b>bib</b>]
+</summary>
+```bibtex
 @inproceedings{simple_object_detection_framework_without_training,
   author={Xie-Li, Danny and Fallas-Moya, Fabian and Calderon-Ramirez, Saul},
   booktitle={2024 IEEE 6th International Conference on BioInspired Processing (BIP)}, 
@@ -257,7 +261,13 @@ For related work on training-free object detection for pineapple crops:
   doi={10.1109/BIP63158.2024.10885396}
 }
 ```
-```
+</details>
+
+<details>
+<summary>
+<a href="https://ieeexplore.ieee.org/document/10459891">Object detection in pineapple fields drone imagery using few shot learning and the segment anything model</a> (Object detection in pineapple fields drone imagery using few shot learning and the segment anything model) [<b>bib</b>]
+</summary>
+```bibtex
 @inproceedings{fallas2023object,
   title={Object detection in pineapple fields drone imagery using few shot learning and the segment anything model},
   author={Fallas-Moya, Fabian and Calderon-Ramirez, Saul and Sadovnik, Amir and Qi, Hairong},
@@ -267,6 +277,7 @@ For related work on training-free object detection for pineapple crops:
   organization={IEEE}
 }
 ```
+</details>
 
 ---
 
