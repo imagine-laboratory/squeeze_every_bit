@@ -170,6 +170,70 @@ The following files will be saved in the `weights/` directory:
 
 ---
 
+## Running `methods.py`
+
+`methods.py` is a Python script designed to evaluate few shot models with various configurable options including TIMM models, Segment Anything Models variants, dimensionality reduction.
+
+### Usage
+
+Run the script via the command line with optional arguments to customize evaluation:
+
+```bash
+python methods.py [OPTIONS]
+```
+
+### Available Command-Line Arguments
+
+| Argument                   | Type    | Default             | Description                                                                 |
+| -------------------------- | ------- | ------------------- | --------------------------------------------------------------------------- |
+| `--root`                   | `str`   | `.`                 | Root directory path.                                                        |
+| `--num-classes`            | `int`   | `1`                 | Number of output classes.                                                   |
+| `--load-pretrained`        | `bool`  | `False`             | Load pretrained weights (True/False).                                       |
+| `--use-sam-embeddings`     | `int`   | `0`                 | Use SAM embeddings (0 = False, 1 = True).                                   |
+| `--timm-model`             | `str`   | `""`                | Name of TIMM model architecture to use, check on [TIMM Collections](https://huggingface.co/timm/collections).|
+| `--loss`                   | `str`   | `"mse"`             | Loss function (e.g., `"mse"`, `"cross_entropy"`).                           |
+| `--optim`                  | `str`   | `"sgd"`             | Optimizer type (e.g., `"sgd"`, `"adam"`).                                   |
+| `--val-freq`               | `int`   | `1`                 | Validation frequency in epochs.                                             |
+| `--ood-labeled-samples`    | `int`   | `1`                 | Number of labeled out-of-distribution samples.                              |
+| `--ood-unlabeled-samples`  | `int`   | `10`                | Number of unlabeled out-of-distribution samples.                            |
+| `--ood-thresh`             | `float` | `0.8`               | Threshold for OOD detection.                                                |
+| `--ood-histogram-bins`     | `int`   | `15`                | Number of bins for OOD histogram.                                           |
+| `--use-semi-split`         | `bool`  | `False`             | Enable semi-supervised split.                                               |
+| `--semi-percentage`        | `float` | `10.`               | Percentage of data used in semi-supervised learning.                        |
+| `--epochs`                 | `int`   | `1`                 | Number of training epochs.                                                  |
+| `--dataset`                | `str`   | `"coco17"`          | Dataset name to use.                                                        |
+| `--batch-size`             | `int`   | `4`                 | Batch size for training.                                                    |
+| `--batch-size-val`         | `int`   | `64`                | Batch size for validation.                                                  |
+| `--reprob`                 | `float` | `0.`                | Random erase probability for data augmentation.                             |
+| `--aug-method`             | `str`   | `"no_augmentation"` | Data augmentation method.                                                   |
+| `--img-resolution`         | `int`   | `512`               | Input image resolution.                                                     |
+| `--new-sample-size`        | `int`   | `224`               | Size of new samples after augmentation.                                     |
+| `--batch-size-labeled`     | `int`   | `1`                 | Batch size for labeled data (in semi-supervised learning).                  |
+| `--batch-size-unlabeled`   | `int`   | `4`                 | Batch size for unlabeled data (in semi-supervised learning).                |
+| `--method`                 | `str`   | `"None"`            | Method or model variant to use.                                             |
+| `--numa`                   | `int`   | `None`              | NUMA node to use (for CPU affinity).                                        |
+| `--output-folder`          | `str`   | `None`              | Folder to save outputs or checkpoints.                                      |
+| `--run-name`               | `str`   | `None`              | Name of the run/experiment.                                                 |
+| `--seed`                   | `int`   | `None`              | Random seed for reproducibility.                                            |
+| `--sam-model`              | `str`   | `None`              | SAM Model weights size to use, available only for SAM model `"b"` or `"h"`. |
+| `--device`                 | `str`   | `"cuda"`            | Device to run on (`"cuda"` or `"cpu"`).                                     |
+| `--sam-proposal`           | `str`   | `"sam"`             | SAM proposal type: `"sam"`, `"edgsam"`, `"mobilesam"`, `"samhq"`, or `"fastsam"`. |
+| `--dim-red`                | `str`   | `"svd"`             | Dimensionality reduction method (`"svd"`).                                  |
+| `--n-components`           | `int`   | `10`                | Number of components for dimensionality reduction.                          |
+| `--beta`                   | `int`   | `1`                 | Beta parameter (context-dependent).                                         |
+| `--mahalanobis`            | `str`   | `"normal"`          | Mahalanobis distance variant.                                               |
+| `--batch-size-validation`  | `int`   | `4`                 | Batch size during validation.                                               |
+| `--ood-validation-samples` | `int`   | `10`                | Number of OOD validation samples.                                           |
+| `--mahalanobis-lambda`     | `float` | `-1.0`              | Lambda parameter for Mahalanobis metric.                                    |
+
+### Example command
+
+```bash
+python methods.py \
+  --root ./data --num-classes 3 --load-pretrained True  --use-sam-embeddings 1 --timm-model "resnet50" --loss "cross_entropy" \
+  --optim "adam" --epochs 20 --dataset "coco17" --batch-size 16 --img-resolution 224 --device "cuda" --run-name "experiment_01"
+```
+
 ## 📖 Citation
 
 If you use this work in your research, please star ⭐ the repository and cite:
@@ -197,4 +261,4 @@ For related work on training-free object detection for pineapple crops:
 ---
 
 ## Acknowledgements
-We thank the National Center for High Technology of Costa Rica for access to the Kabré Cluster, the University of Costa Rica (project C4612), and ITCR's Postgraduate Office for supporting this publication.
+This research was partially supported by computational resources provided through a machine allocation on the Kabré supercomputer at the Costa Rica National High Technology Center. Additional support was received from the University of Costa Rica (project C4612) and the Postgraduate Office of the Instituto Tecnológico de Costa Rica, which facilitated this publication.
