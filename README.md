@@ -23,7 +23,7 @@
 
 ### ✅ Requirements
 
-* Python ≥ 3.8
+* Python == 3.8
 * Virtual environment (recommended)
 * Dependencies listed in `requirements.txt`
 
