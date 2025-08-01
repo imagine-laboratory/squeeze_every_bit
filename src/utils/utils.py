@@ -36,44 +36,27 @@ def get_parameters():
     # Model 
     parser.add_argument('--root',type=str, default='.')
     parser.add_argument('--num-classes', type=int, default=1) 
-    add_bool_arg(parser, 'load-pretrained', default=False) 
     # add_bool_arg(parser, 'use-sam-embeddings', default=False) 
     parser.add_argument('--use-sam-embeddings', type=int, default=0)
     parser.add_argument('--timm-model', type=str, default="")  
-    parser.add_argument('--loss', type=str, default="mse")  
-    parser.add_argument('--optim', type=str, default="sgd")
-    parser.add_argument('--val-freq', type=int, default=1)
     parser.add_argument('--ood-labeled-samples', type=int, default=1)
     parser.add_argument('--ood-unlabeled-samples', type=int, default=10)
-    parser.add_argument('--ood-thresh', type=float, default=0.8)
-    parser.add_argument('--ood-histogram-bins', type=int, default=15)
-
-    # semi
-    add_bool_arg(parser, 'use-semi-split', default=False) 
-    parser.add_argument('--semi-percentage', type=float, default=10.)
-
-    # training
-    parser.add_argument('--epochs', type=int, default=1)
 
     # dataset
     parser.add_argument('--dataset', default='coco17', type=str, metavar='DATASET')
     parser.add_argument('--batch-size', type=int, default=4)
     parser.add_argument('--batch-size-val', type=int, default=64)
-    parser.add_argument('--reprob', type=float, default=0.)
-    parser.add_argument('--aug-method', type=str, default="no_augmentation")
     parser.add_argument('--img-resolution', type=int, default=512)
     parser.add_argument('--new-sample-size', type=int, default=224)
     parser.add_argument('--batch-size-labeled', type=int, default=1)
     parser.add_argument('--batch-size-unlabeled', type=int, default=4)
     parser.add_argument('--method', default='None', type=str)
 
-    # add_bool_arg(parser, 'store-val', default=False) 
-
     # general
-    parser.add_argument('--numa', type=int, default=None)
+    parser.add_argument('--numa', type=int, default=-1)
     parser.add_argument('--output-folder', type=str, default=None)  
     parser.add_argument('--run-name', type=str, default=None)  
-    parser.add_argument('--seed', type=int, default=None)
+    parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--sam-model', type=str, default=None)
     parser.add_argument('--device', type=str, default="cuda")
     
@@ -88,8 +71,7 @@ def get_parameters():
     parser.add_argument('--batch-size-validation', type=int, default=4)
     parser.add_argument('--ood-validation-samples', type=int, default=10)
     parser.add_argument('--mahalanobis-lambda', type=float, default=-1.0)
-
-
+    
     return parser.parse_args()
 
 def get_cpu_list(val: int = None):
