@@ -40,7 +40,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 ```bash
 git clone https://github.com/imagine-laboratory/squeeze_every_bit.git
-cd squeeze_every_bit
+cd squeeze_every_bit/src
 ```
 
 3. **Install dependencies**
