@@ -166,7 +166,7 @@ chmod +x download_weights.sh
 #### 📁 Weights Output
 
 The following files will be saved in the `weights/` directory:
- `fastsam.pth`, `edge_sam.pth`, `sam_vit_h_4b8939.pth`, `mobile_sam.pt`, `sam_hq.pth`
+ `FastSAM-x.pt`, `edge_sam.pth`, `sam_vit_h_4b8939.pth`, `mobile_sam.pt`, `sam_hq.pth`
 
 ---
 
@@ -205,7 +205,7 @@ python methods.py [OPTIONS]
 | `--output-folder`          | `str`   | `None`              | Folder to save outputs or checkpoints.                                      |
 | `--run-name`               | `str`   | `None`              | Name of the run/experiment.                                                 |
 | `--seed`                   | `int`   | `None`              | Random seed for reproducibility.                                            |
-| `--sam-model`              | `str`   | `None`              | SAM Model weights size to use, available only for SAM model `"b"` or `"h"`. |
+| `--sam-model`              | `str`   | `None`              | SAM Model weights size to use, available only for `"sam"` when using `--sam-proposal` model `"b"` or `"h"`. |
 | `--device`                 | `str`   | `"cuda"`            | Device to run on (`"cuda"` or `"cpu"`).                                     |
 | `--sam-proposal`           | `str`   | `"sam"`             | SAM proposal type: `"sam"`, `"edgsam"`, `"mobilesam"`, `"samhq"`, or `"fastsam"`. |
 | `--dim-red`                | `str`   | `"svd"`             | Dimensionality reduction method (`"svd"`).                                  |
