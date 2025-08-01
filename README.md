@@ -61,7 +61,7 @@ This will install:
 
 ### ⚠️ Notes
 
-* Use Python 3.8 or higher.
+* Use Python 3.8.
 * For GPU acceleration, install the appropriate [PyTorch with CUDA](https://pytorch.org/get-started/locally/).
 * If you encounter issues with `git+https` dependencies, make sure Git is installed:
 
