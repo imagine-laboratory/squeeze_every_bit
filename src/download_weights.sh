@@ -8,7 +8,7 @@ echo "Starting download of model weights..."
 
 # === FastSAM ===
 echo "Downloading FastSAM checkpoint..."
-gdown --id 10XmSj6mmpmRb8NhXbtiuO9cTTBwR_9SV -O fastsam.pth
+gdown --id 1m1sjY4ihXBU1fZXdQ-Xdj-mDltW-2Rqv -O FastSAM-x.pt
 
 # === EdgeSAM ===
 echo "Downloading EdgeSAM checkpoint..."
