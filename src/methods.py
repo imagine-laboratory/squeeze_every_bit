@@ -4,7 +4,6 @@ import torch
 import cv2
 
 from torch.nn.parallel import DistributedDataParallel as NativeDDP
-from engine.subspaces_filter import SubspacesFilter
 
 try:
     from apex import amp
@@ -39,11 +38,10 @@ from engine.prototypical_networks import PrototypicalNetworks
 from engine.relational_networks import RelationNetworks
 from engine.matching_networks import MatchingNetworks
 from engine.bdcspn import BDCSPN
-from engine.ptmap import PTMAP
 from engine.ood_filter_neg_likelihood import OOD_filter_neg_likelihood
 from engine.mahalanobis_filter import MahalanobisFilter
 
-from sam_proposal import FASTSAM, MobileSAM, SAM, EdgeSAM
+from sam_proposal import FASTSAM, MobileSAM, SAM #, EdgeSAM
 from utils.constants import SamMethod, MainMethod
 #------------------------------------------------------------------------------------------------
 
@@ -149,7 +147,6 @@ def few_shot(args, is_single_class=None, output_root=None, fewshot_method=None):
             args.load_pretrained, 
             args.num_classes * 2 # one additional class for background
         )
-
     if fewshot_method == MainMethod.FEWSHOT_2_CLASSES_RELATIONAL_NETWORK:
         fs_model = RelationNetworks(
             is_single_class=is_single_class,
@@ -170,14 +167,6 @@ def few_shot(args, is_single_class=None, output_root=None, fewshot_method=None):
         ).to(args.device)
     elif fewshot_method == MainMethod.FEWSHOT_2_CLASSES_BDCSPN:
         fs_model = BDCSPN(
-            is_single_class=is_single_class,
-            use_sam_embeddings=args.use_sam_embeddings,
-            backbone=feature_extractor, 
-            use_softmax=False,
-            device=args.device
-        ).to(args.device)
-    elif fewshot_method == MainMethod.FEWSHOT_2_CLASSES_PTMAP:
-        fs_model = PTMAP(
             is_single_class=is_single_class,
             use_sam_embeddings=args.use_sam_embeddings,
             backbone=feature_extractor, 
@@ -543,59 +532,6 @@ def mahalanobis_filter(args, is_single_class=True, output_root=None, dim_red="sv
         )
     else:
         print("No implemented for multiple class mahalanobis!")
-
-def subspaces_filter(args, is_single_class=True, output_root=None):
-    """ Use sam and fewshot (maximum likelihood) to classify masks.
-    Params
-    :args -> parameters from bash.
-    :output_root (str) -> output folder location.
-    """
-    # STEP 1: create data loaders
-    labeled_loader, test_loader,_,_ = create_datasets_and_loaders(args)
-    # save new gt into a separate json file
-    if not os.path.exists(output_root):
-        os.makedirs(output_root)
-    # save gt
-    save_loader_to_json(test_loader, output_root, "test")
-
-    # sam instance - default values of the model
-    # STEP 2: create an SAM instance
-    if args.sam_proposal == SamMethod.MOBILE_SAM:
-        sam = MobileSAM(args)
-        sam.load_simple_mask()
-    elif args.sam_proposal == SamMethod.FAST_SAM:
-        sam = FASTSAM(args)
-        sam.load_simple_mask()
-    else:
-        sam = SAM(args)
-        sam.load_simple_mask()
-
-    # instance the main class and instance the timm model
-    subspaces_filter = SubspacesFilter(
-        timm_model=args.timm_model, 
-        timm_pretrained=args.load_pretrained,
-        sam_model=sam,
-        use_sam_embeddings=args.use_sam_embeddings,
-        is_single_class=is_single_class
-    )
-
-    # run filter using the backbone, sam, and ood
-    subspaces_filter.run_filter(
-        labeled_loader, test_loader, 
-        dir_filtered_root=output_root
-    )
-
-    # STEP 3: evaluate results
-    MAX_IMAGES = 100000
-    gt_eval_path = f"{output_root}/test.json"
-    coco_gt = COCO(gt_eval_path)
-    image_ids = coco_gt.getImgIds()[:MAX_IMAGES]
-    res_data = f"{output_root}/bbox_results.json"
-
-    eval_sam(
-        coco_gt, image_ids, res_data, 
-        output_root, method=args.method,
-    )
         
 
 if __name__ == '__main__':
@@ -630,10 +566,6 @@ if __name__ == '__main__':
         few_shot(args, is_single_class=False, output_root=output_root, fewshot_method=args.method)
     elif args.method == MainMethod.FEWSHOT_2_CLASSES_BDCSPN:
         few_shot(args, is_single_class=False, output_root=output_root, fewshot_method=args.method)
-    elif args.method == MainMethod.FEWSHOT_2_CLASSES_PTMAP:
-        few_shot(args, is_single_class=False, output_root=output_root, fewshot_method=args.method)
     elif args.method == MainMethod.FEWSHOT_MAHALANOBIS:
         output_root = f"{root_output}{args.output_folder}/seed{args.seed}/{args.ood_labeled_samples}_{args.ood_unlabeled_samples}/{args.method}_{args.mahalanobis}_beta_{args.beta}_lambda_{args.mahalanobis_lambda}@{args.timm_model}@{args.sam_proposal}@{args.dim_red}_{args.n_components}"
         mahalanobis_filter(args, is_single_class=True, output_root=output_root, mahalanobis_method=args.mahalanobis, beta=args.beta)
-    elif args.method == MainMethod.FEWSHOT_SUBSPACES:
-        subspaces_filter(args, is_single_class=True, output_root=output_root)
