@@ -188,24 +188,14 @@ python methods.py [OPTIONS]
 | -------------------------- | ------- | ------------------- | --------------------------------------------------------------------------- |
 | `--root`                   | `str`   | `.`                 | Root directory path.                                                        |
 | `--num-classes`            | `int`   | `1`                 | Number of output classes.                                                   |
-| `--load-pretrained`        | `bool`  | `False`             | Load pretrained weights (True/False).                                       |
 | `--use-sam-embeddings`     | `int`   | `0`                 | Use SAM embeddings (0 = False, 1 = True).                                   |
 | `--timm-model`             | `str`   | `""`                | Name of TIMM model architecture to use, check on [TIMM Collections](https://huggingface.co/timm/collections).|
-| `--loss`                   | `str`   | `"mse"`             | Loss function (e.g., `"mse"`, `"cross_entropy"`).                           |
-| `--optim`                  | `str`   | `"sgd"`             | Optimizer type (e.g., `"sgd"`, `"adam"`).                                   |
-| `--val-freq`               | `int`   | `1`                 | Validation frequency in epochs.                                             |
 | `--ood-labeled-samples`    | `int`   | `1`                 | Number of labeled out-of-distribution samples.                              |
 | `--ood-unlabeled-samples`  | `int`   | `10`                | Number of unlabeled out-of-distribution samples.                            |
-| `--ood-thresh`             | `float` | `0.8`               | Threshold for OOD detection.                                                |
 | `--ood-histogram-bins`     | `int`   | `15`                | Number of bins for OOD histogram.                                           |
-| `--use-semi-split`         | `bool`  | `False`             | Enable semi-supervised split.                                               |
-| `--semi-percentage`        | `float` | `10.`               | Percentage of data used in semi-supervised learning.                        |
-| `--epochs`                 | `int`   | `1`                 | Number of training epochs.                                                  |
 | `--dataset`                | `str`   | `"coco17"`          | Dataset name to use.                                                        |
 | `--batch-size`             | `int`   | `4`                 | Batch size for training.                                                    |
 | `--batch-size-val`         | `int`   | `64`                | Batch size for validation.                                                  |
-| `--reprob`                 | `float` | `0.`                | Random erase probability for data augmentation.                             |
-| `--aug-method`             | `str`   | `"no_augmentation"` | Data augmentation method.                                                   |
 | `--img-resolution`         | `int`   | `512`               | Input image resolution.                                                     |
 | `--new-sample-size`        | `int`   | `224`               | Size of new samples after augmentation.                                     |
 | `--batch-size-labeled`     | `int`   | `1`                 | Batch size for labeled data (in semi-supervised learning).                  |
@@ -245,8 +235,9 @@ The code can be executed with one of the following few-shot model options passed
 
 ```bash
 python methods.py \
-  --root ./data --num-classes 3 --load-pretrained True  --use-sam-embeddings 1 --timm-model "resnet50" --loss "cross_entropy" \
-  --optim "adam" --epochs 20 --dataset "coco17" --batch-size 16 --img-resolution 224 --device "cuda" --run-name "experiment_01"
+--root ./pineapples_5m --num-classes 1  --use-sam-embeddings 0 --timm-model "resnet50" \
+--dataset "coco17" --batch-size 16 --img-resolution 224 --device "cuda" \
+--run-name "experiment_01" --sam-proposal "fastsam" --method "samAlone"
 ```
 
 ## 📖 Citation
