@@ -1,9 +1,6 @@
-# Python version requirement
-python>=3.8
-
 # PyTorch and related packages
-torch
-torchvision
+torch>=1.7.0
+torchvision>=0.8.1
 torchaudio
 
 # Other essential packages
@@ -16,8 +13,10 @@ scikit-learn
 opencv-contrib-python
 segment-anything-hq
 
+# For edge sam
+#mmcv
+
 # GitHub packages
-git+https://github.com/openai/CLIP.git
 ultralytics==8.0.120
 git+https://github.com/facebookresearch/segment-anything.git
 git+https://github.com/CASIA-IVA-Lab/FastSAM.git
