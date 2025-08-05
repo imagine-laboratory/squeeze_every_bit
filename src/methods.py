@@ -536,7 +536,7 @@ def mahalanobis_filter(args, is_single_class=True, output_root=None, dim_red="sv
 
 if __name__ == '__main__':
     args = get_parameters()
-    root_output = "./output/" #/content/drive/MyDrive/Agro-Pineapples/output/" #"./output/"
+    root_output = "./output/" 
 
 
     if not args.numa == -1:
