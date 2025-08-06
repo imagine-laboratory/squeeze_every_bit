@@ -46,12 +46,14 @@ class SamMethod:
         FAST_SAM (str): Optimized version of SAM for faster inference.
         EDGE_SAM (str): Edge-compatible version of SAM.
         SAM_HQ (str): High-quality version of SAM with refined segmentation.
+        SLIM_SAM (str): Slim sam version.
     """
     SAM = 'sam'
     MOBILE_SAM = 'mobilesam'
     FAST_SAM = 'fastsam'
     EDGE_SAM = 'edgsam'
     SAM_HQ = 'samhq'
+    SLIM_SAM = 'slimsam'
 
 
 class DimensionalityReductionMethod:
