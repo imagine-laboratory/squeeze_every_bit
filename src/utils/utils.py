@@ -53,22 +53,26 @@ def get_parameters():
     parser.add_argument('--new-sample-size', type=int, default=224)
     parser.add_argument('--batch-size-labeled', type=int, default=1)
     parser.add_argument('--batch-size-unlabeled', type=int, default=4)
-    parser.add_argument('--method', default='None', type=str)
+    parser.add_argument('--method', default='None', type=str,
+                        help="Possible values: 'samAlone', 'fewshot1', 'fewshot2', 'fewshotOOD', 'fewshotBDCSPN', 'fewshotMahalanobis', 'ss'")
 
     # general
     parser.add_argument('--numa', type=int, default=-1)
     parser.add_argument('--output-folder', type=str, default=None)  
     parser.add_argument('--run-name', type=str, default=None)  
     parser.add_argument('--seed', type=int, default=1)
-    parser.add_argument('--sam-model', type=str, default=None)
-    parser.add_argument('--device', type=str, default="cuda")
+    parser.add_argument('--sam-model', type=str, default=None,
+                        help="Check each object proposal weights.")
+    parser.add_argument('--device', type=str, default="cuda",
+                        help="Possible values 'cuda' or 'cpu'")
     
-    # Possible values for sam-proposal to generate object proposals, 'sam' 'semanticsam' 'mobilesam' 'fastsam'
-    parser.add_argument('--sam-proposal', type=str, default="sam")
+    # Possible values for sam-proposal to generate object proposals, 'samhq' 'sam' 'semanticsam' 'mobilesam' 'fastsam'
+    parser.add_argument('--sam-proposal', type=str, default="sam", 
+                        help="Possible values for sam-proposal to generate object proposals, 'samhq' 'sam' 'edgesam' 'slimsam' 'mobilesam' 'fastsam'")
 
     # Dimensionality reduction parameters
     parser.add_argument('--dim-red', type=str, default="svd")
-    parser.add_argument('--n-components', type=int, default=10)
+    parser.add_argument('--n-components', type=int, default=8)
     parser.add_argument('--beta', type=int, default=1)
     parser.add_argument('--mahalanobis', type=str, default="normal")
     parser.add_argument('--batch-size-validation', type=int, default=4)
