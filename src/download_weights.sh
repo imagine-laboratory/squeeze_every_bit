@@ -26,4 +26,11 @@ wget -O mobile_sam.pt https://github.com/ChaoningZhang/MobileSAM/raw/master/weig
 echo "Downloading SAM-HQ checkpoint..."
 gdown --id 11yExZLOve38kRZPfRx_MRxfIAKmfMY47 -O sam_hq.pth
 
+# === Slim SAM ===
+echo "Downloading SlimSAM-50 checkpoint..."
+gdown --id 1bTjBZs2oWHeo6OPxumD_Gces4VCcU0JI -O SlimSAM-50.pth
+
+echo "Downloading SlimSAM-77 checkpoint..."
+gdown --id 14BhU66umvY0E1FWoGsCMpLqXMNw9c3Nx -O SlimSAM-77.pth
+
 echo "All model weights downloaded successfully into the weights/ directory."
