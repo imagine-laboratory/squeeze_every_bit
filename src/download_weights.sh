@@ -23,8 +23,17 @@ echo "Downloading MobileSAM checkpoint..."
 wget -O mobile_sam.pt https://github.com/ChaoningZhang/MobileSAM/raw/master/weights/mobile_sam.pt
 
 # === SAM-HQ ===
-echo "Downloading SAM-HQ checkpoint..."
-gdown --id 11yExZLOve38kRZPfRx_MRxfIAKmfMY47 -O sam_hq.pth
+echo "Downloading SAM-HQ B checkpoint..."
+gdown --id 11yExZLOve38kRZPfRx_MRxfIAKmfMY47 -O sam_hq_vit_b.pth
+
+echo "Downloading SAM-HQ L checkpoint..."
+gdown --id 1Uk17tDKX1YAKas5knI4y9ZJCo0lRVL0G -O sam_hq_vit_l.pth
+
+echo "Downloading SAM-HQ H checkpoint..."
+gdown --id 1qobFYrI4eyIANfBSmYcGuWRaSIXfMOQ8 -O sam_hq_vit_h.pth
+
+echo "Downloading SAM-HQ Tiny checkpoint..."
+wget -O sam_hq_vit_tiny.pth https://huggingface.co/lkeab/hq-sam/resolve/main/sam_hq_vit_tiny.pth
 
 # === Slim SAM ===
 echo "Downloading SlimSAM-50 checkpoint..."
