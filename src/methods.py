@@ -41,7 +41,7 @@ from engine.bdcspn import BDCSPN
 from engine.ood_filter_neg_likelihood import OOD_filter_neg_likelihood
 from engine.mahalanobis_filter import MahalanobisFilter
 
-from sam_proposal import FASTSAM, MobileSAM, SAM, SlimSAM #, EdgeSAM
+from sam_proposal import FASTSAM, MobileSAM, SAM, SlimSAM, SAMHq#, EdgeSAM
 from utils.constants import SamMethod, MainMethod
 #------------------------------------------------------------------------------------------------
 
@@ -73,6 +73,9 @@ def sam_simple(args, output_root):
         sam.load_simple_mask()
     elif args.sam_proposal == SamMethod.SLIM_SAM:
         sam = SlimSAM(args)
+        sam.load_simple_mask()
+    elif args.sam_proposal == SamMethod.SAM_HQ:
+        sam = SAMHq(args)
         sam.load_simple_mask()
     else:
         sam = SAM(args)
@@ -135,6 +138,9 @@ def few_shot(args, is_single_class=None, output_root=None, fewshot_method=None):
         sam.load_simple_mask()
     elif args.sam_proposal == SamMethod.SLIM_SAM:
         sam = SlimSAM(args)
+        sam.load_simple_mask()
+    elif args.sam_proposal == SamMethod.SAM_HQ:
+        sam = SAMHq(args)
         sam.load_simple_mask()
     else:
         sam = SAM(args)
@@ -330,6 +336,9 @@ def ood_filter(args, output_root):
     elif args.sam_proposal == SamMethod.SLIM_SAM:
         sam = SlimSAM(args)
         sam.load_simple_mask()
+    elif args.sam_proposal == SamMethod.SAM_HQ:
+        sam = SAMHq(args)
+        sam.load_simple_mask()
     else:
         sam = SAM(args)
         sam.load_simple_mask()
@@ -496,6 +505,9 @@ def mahalanobis_filter(args, is_single_class=True, output_root=None, dim_red="sv
         sam.load_simple_mask()
     elif args.sam_proposal == SamMethod.SLIM_SAM:
         sam = SlimSAM(args)
+        sam.load_simple_mask()
+    elif args.sam_proposal == SamMethod.SAM_HQ:
+        sam = SAMHq(args)
         sam.load_simple_mask()
     else:
         sam = SAM(args)
