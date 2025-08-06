@@ -3,3 +3,4 @@ from .sam import *
 from .fastsam import *
 from .mobilesam import *
 from .samhq import *
+from .slimsam import *
