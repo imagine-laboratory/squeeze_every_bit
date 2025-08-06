@@ -33,14 +33,17 @@ def seed_everything(seed: int = 42, rank: int = 0):
 def get_parameters():
     # parameters
     parser = argparse.ArgumentParser(description='TIMM + new data aug')
+    # Feature extractor
+    add_bool_arg(parser, 'load-pretrained', default=True) 
+
     # Model 
     parser.add_argument('--root',type=str, default='.')
     parser.add_argument('--num-classes', type=int, default=1) 
     # add_bool_arg(parser, 'use-sam-embeddings', default=False) 
     parser.add_argument('--use-sam-embeddings', type=int, default=0)
     parser.add_argument('--timm-model', type=str, default="")  
-    parser.add_argument('--ood-labeled-samples', type=int, default=1)
-    parser.add_argument('--ood-unlabeled-samples', type=int, default=10)
+    parser.add_argument('--ood-labeled-samples', type=int, default=1, help="Number of support set.")
+    parser.add_argument('--ood-unlabeled-samples', type=int, default=10, help="Number of validation set.")
 
     # dataset
     parser.add_argument('--dataset', default='coco17', type=str, metavar='DATASET')
@@ -271,4 +274,3 @@ def create_datasets_and_loaders(args):
         normalize_img=normalize_imgs
     )
     return loader_label, loader_test, loader_unlabel, loader_full_label, loader_validation
-    
