@@ -1,3 +1,30 @@
+<!--             
+<style>
+  .texttt {
+    font-family: Consolas; /* Monospace font */
+    font-size: 1em; /* Match surrounding text size */
+    color: teal; /* Add this line to set text color to blue */
+    letter-spacing: 0; /* Adjust if needed */
+  }
+</style> -->
+
+<h1 align="center">
+  <span style="color: teal; font-family: Consolas;">Squeeze Every Bit of Insight</span>: Leveraging Few-shot Models with a Compact Support Set for Domain Transfer in Object Detection from Pineapple Fields
+</h1>
+
+
+
+
+<div align="center">
+  <a href="https://scholar.google.com/citations?user=j02Fj8EAAAAJ&hl=en" target="_blank">Fabian&nbsp;Fallas-Moya</a><sup>1</sup> &ensp; <b>&middot;</b> &ensp;
+  <a href="https://scholar.google.com/citations?user=vipkAKEAAAAJ&hl=es" target="_blank">Danny&nbsp;Xie-Li</a><sup>2</sup> &ensp; <b>&middot;</b> &ensp;
+  <a href="https://scholar.google.com/citations?user=O3hhdFQAAAAJ&hl=en" target="_blank">Saul&nbsp;Calderón-Ramírez</a><sup>2</sup>
+  <br>
+  <sup>1</sup> Atlantic Campus, Universidad de Costa Rica, Cartago, Costa Rica &emsp; <br>
+  <sup>2</sup> Computer Science Department, Instituto Tecnologico de Costa Rica, Cartago, Costa Rica &emsp;
+</div>
+
+</div>
 
 ---
 
@@ -5,9 +32,6 @@
   <img src="assets/simple_object_detection_framework.jpg?raw=true" width="99.1%" />
 </p>
 
-# **Squeeze Every Bit of Insight**
-
-## *Leveraging Few-shot Models with a Compact Support Set for Domain Transfer in Object Detection from Pineapple Fields*
 
 ---
 
