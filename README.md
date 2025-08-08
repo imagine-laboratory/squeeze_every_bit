@@ -268,8 +268,8 @@ python methods.py \
 
 If you find this repository useful, please star ⭐ the repository and cite:
 
-```
-@inproceedings{squeeze_bit_insight,
+```bibtex
+@InProceedings{squeeze_bit_insight,
     title={Squeeze Every Bit of Insight: Leveraging Few-shot Models with a Compact Support Set for Domain Transfer in Object Detection from Pineapple Fields},
     year={2025}
 }
@@ -280,8 +280,8 @@ For related work on training-free object detection for agriculture applications:
 
 <a href="https://ieeexplore.ieee.org/abstract/document/10885396">Simple Object Detection Framework without Training</a> [<b>bib</b>]
 
-```
-@inproceedings{simple_object_detection_framework_without_training,
+```bibtex
+@InProceedings{simple_object_detection_framework_without_training,
   author={Xie-Li, Danny and Fallas-Moya, Fabian and Calderon-Ramirez, Saul},
   booktitle={2024 IEEE 6th International Conference on BioInspired Processing (BIP)}, 
   title={Simple Object Detection Framework without Training}, 
@@ -293,8 +293,8 @@ For related work on training-free object detection for agriculture applications:
 
 
 <a href="https://ieeexplore.ieee.org/document/10459891">Object detection in pineapple fields drone imagery using few shot learning and the segment anything model</a> [<b>bib</b>]
-```
-@inproceedings{fallas2023object,
+```bibtex
+@InProceedings{fallas2023object,
   title={Object detection in pineapple fields drone imagery using few shot learning and the segment anything model},
   author={Fallas-Moya, Fabian and Calderon-Ramirez, Saul and Sadovnik, Amir and Qi, Hairong},
   booktitle={2023 International Conference on Machine Learning and Applications (ICMLA)},
