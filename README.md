@@ -270,6 +270,7 @@ If you find this repository useful, please star ⭐ the repository and cite:
 
 ```bibtex
 @InProceedings{squeeze_bit_insight,
+    author={Fallas-Moya, Fabian and Xie-Li, Danny and Calderon-Ramirez, Saul},
     title={Squeeze Every Bit of Insight: Leveraging Few-shot Models with a Compact Support Set for Domain Transfer in Object Detection from Pineapple Fields},
     year={2025}
 }
