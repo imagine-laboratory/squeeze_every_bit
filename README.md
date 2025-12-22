@@ -240,6 +240,7 @@ python methods.py [OPTIONS]
 | `--ood-validation-samples` | `int`   | `10`                | Number of OOD validation samples.                                           |
 | `--mahalanobis-lambda`     | `float` | `-1.0`              | Lambda parameter for Mahalanobis metric.                                    |
 
+---
 ### Fewshot Models Available
 
 #### 🧠 Few-Shot Model Options
@@ -263,6 +264,55 @@ python methods.py \
 --dataset "coco17" --batch-size 16 --img-resolution 224 --device "cuda" \
 --run-name "experiment_01" --sam-proposal "fastsam" --method "samAlone"
 ```
+---
+## 📊 Results
+The table below summarizes the average mAP (↑) obtained by different few-shot learning methods combined with multiple object proposal models.  
+Results are reported as **mean ± standard deviation**.
+
+- **Bold values** indicate the best-performing configuration for each few-shot method.
+- The **overall best performance** is achieved by **Mahalanobis (λ = 1.0)** with **FastSAM**.
+
+| Few-shot method | # Labeled images | Feature extractor | Object proposal model | Avg. mAP ↑ |
+|-----------------|------------------|-------------------|-----------------------|------------|
+| SAM Alone | – | – | SAM-H | 0.232 ± 0.007 |
+| SAM Alone | – | – | HQ-SAM-H | 0.219 ± 0.007 |
+| SAM Alone | – | – | EdgeSAM | 0.077 ± 0.006 |
+| SAM Alone | – | – | MobileSAM | 0.205 ± 0.007 |
+| SAM Alone | – | – | SlimSAM-50 | 0.145 ± 0.007 |
+| SAM Alone | – | – | FastSAM | **0.378 ± 0.006** |
+| Euclidean prototype | 6 | EfficientNet-L2 | SAM-H | 0.335 ± 0.019 |
+| Euclidean prototype | 1 | ViT-CLIP | HQ-SAM-H | 0.287 ± 0.019 |
+| Euclidean prototype | 1 | ViT-CLIP | EdgeSAM | 0.112 ± 0.009 |
+| Euclidean prototype | 5 | ViT-CLIP | MobileSAM | 0.266 ± 0.005 |
+| Euclidean prototype | 6 | EfficientNet-L2 | SlimSAM-50 | 0.194 ± 0.016 |
+| Euclidean prototype | 4 | Xcit Nano | FastSAM | **0.393 ± 0.002** |
+| Density prototype | 9 | EfficientNet-L2 | SAM-H | 0.317 ± 0.014 |
+| Density prototype | 10 | Xcit Nano | HQ-SAM-H | 0.270 ± 0.019 |
+| Density prototype | 10 | Xcit Nano | EdgeSAM | 0.102 ± 0.011 |
+| Density prototype | 10 | Xcit Nano | MobileSAM | 0.230 ± 0.012 |
+| Density prototype | 9 | EfficientNet-L2 | SlimSAM-50 | 0.185 ± 0.013 |
+| Density prototype | 8 | ViT-CLIP | FastSAM | **0.354 ± 0.049** |
+| BD-CSPN | 2 | Swin V2 | SAM-H | 0.264 ± 0.014 |
+| BD-CSPN | 2 | Swin V2 | HQ-SAM-H | 0.234 ± 0.010 |
+| BD-CSPN | 2 | Swin V2 | EdgeSAM | 0.080 ± 0.007 |
+| BD-CSPN | 2 | Swin V2 | MobileSAM | 0.222 ± 0.010 |
+| BD-CSPN | 2 | Swin V2 | SlimSAM-50 | 0.163 ± 0.010 |
+| BD-CSPN | 2 | Swin V2 | FastSAM | **0.379 ± 0.005** |
+| Mahalanobis λ=0.5 (Ours) | 3 | ViT-CLIP | SAM-H | 0.354 ± 0.031 |
+| Mahalanobis λ=0.5 (Ours) | 1 | ViT-CLIP | HQ-SAM-H | 0.305 ± 0.044 |
+| Mahalanobis λ=0.5 (Ours) | 1 | ViT-CLIP | EdgeSAM | 0.109 ± 0.011 |
+| Mahalanobis λ=0.5 (Ours) | 3 | ViT-CLIP | MobileSAM | 0.270 ± 0.010 |
+| Mahalanobis λ=0.5 (Ours) | 1 | Swin V2 | SlimSAM-50 | 0.210 ± 0.025 |
+| Mahalanobis λ=0.5 (Ours) | 4 | Xcit Nano | FastSAM | **0.402 ± 0.004** |
+| **Mahalanobis λ=1.0 (Ours)** | 3 | ViT-CLIP | SAM-H | **0.389 ± 0.015** |
+| **Mahalanobis λ=1.0 (Ours)** | 3 | ViT-CLIP | HQ-SAM-H | **0.346 ± 0.013** |
+| **Mahalanobis λ=1.0 (Ours)** | 3 | ViT-CLIP | EdgeSAM | **0.122 ± 0.008** |
+| **Mahalanobis λ=1.0 (Ours)** | 3 | ViT-CLIP | MobileSAM | **0.284 ± 0.009** |
+| **Mahalanobis λ=1.0 (Ours)** | 3 | ViT-CLIP | SlimSAM-50 | **0.243 ± 0.010** |
+| **Mahalanobis λ=1.0 (Ours)** | 8 | Xcit Nano | FastSAM | **0.406 ± 0.003** |
+
+---
+
 
 ## 📖 Citation
 
