@@ -70,7 +70,7 @@ def get_parameters():
     
     # Possible values for sam-proposal to generate object proposals, 'samhq' 'sam' 'semanticsam' 'mobilesam' 'fastsam'
     parser.add_argument('--sam-proposal', type=str, default="sam", 
-                        help="Possible values for sam-proposal to generate object proposals, 'samhq' 'sam' 'edgesam' 'slimsam' 'mobilesam' 'fastsam'")
+                        help="Possible values for sam-proposal to generate object proposals, 'sam2' 'sam3' 'samhq' 'sam' 'edgesam' 'slimsam' 'mobilesam' 'fastsam'")
 
     # Dimensionality reduction parameters
     parser.add_argument('--dim-red', type=str, default="svd")
