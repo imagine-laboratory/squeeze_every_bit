@@ -54,7 +54,8 @@ class SamMethod:
     EDGE_SAM = 'edgsam'
     SAM_HQ = 'samhq'
     SLIM_SAM = 'slimsam'
-
+    SAM2 = 'sam2'
+    SAM3 = 'sam3'
 
 class DimensionalityReductionMethod:
     """
