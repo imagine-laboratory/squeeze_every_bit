@@ -44,7 +44,9 @@ def get_parameters():
     parser.add_argument('--timm-model', type=str, default="")  
     parser.add_argument('--ood-labeled-samples', type=int, default=1, help="Number of support set.")
     parser.add_argument('--ood-unlabeled-samples', type=int, default=10, help="Number of validation set.")
-
+    parser.add_argument('--ood-thresh', type=float, default=0.8) 
+    parser.add_argument('--ood-histogram-bins', type=int, default=15)
+    
     # dataset
     parser.add_argument('--dataset', default='coco17', type=str, metavar='DATASET')
     parser.add_argument('--batch-size', type=int, default=4)
