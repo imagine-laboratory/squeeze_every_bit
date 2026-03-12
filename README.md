@@ -319,11 +319,14 @@ Results are reported as **mean ± standard deviation**.
 If you find this repository useful, please star ⭐ the repository and cite:
 
 ```bibtex
-@InProceedings{squeeze_bit_insight,
-    author={Fallas-Moya, Fabian and Xie-Li, Danny and Calderon-Ramirez, Saul},
-    title={Squeeze Every Bit of Insight: Leveraging Few-shot Models with a Compact Support Set for Domain Transfer in Object Detection from Pineapple Fields},
-    year={2025}
-}
+@InProceedings{11420556,
+  author={Fallas-Moya, Fabián and Xie-Li, Danny and Calderón-Ramírez, Saúl},
+  booktitle={2025 LI Latin American Computer Conference (CLEI)}, 
+  title={Squeeze Every Bit of Insight: Leveraging Few-shot Models with a Compact Support Set for Domain Transfer in Object Detection from Pineapple Fields}, 
+  year={2025},
+  pages={1-10},
+  keywords={Training;Pipelines;Prototypes;Estimation;Crops;Object detection;Transformers;Few shot learning;Load modeling;Drones;few-shot;object detection;agriculture;mahalanobis},
+  doi={10.1109/CLEI67442.2025.11420556}}
 ```
 
 For related work on training-free object detection for agriculture applications:
