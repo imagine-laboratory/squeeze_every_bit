@@ -130,9 +130,12 @@ def get_background(
         # (a, b) = intersection(proposals[830], gt_new)
         (res, areas) = intersection(proposals, gt_repeated)
         if ious.numel() > 0:
-            ious = torch.cat((ious,res), dim=1)
+            ious = torch.cat((ious, res), dim=1)
         else:
             ious = res
+    
+    if ious.numel() == 0 or ious.dim() < 2:
+        return imgs, labels
 
     # 3. CHOOSE the winner proposals
     for idx_ground in list(range(ious.shape[1])):

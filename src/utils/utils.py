@@ -80,6 +80,9 @@ def get_parameters():
     parser.add_argument('--batch-size-validation', type=int, default=4)
     parser.add_argument('--ood-validation-samples', type=int, default=10)
     parser.add_argument('--mahalanobis-lambda', type=float, default=-1.0)
+
+    # Multiclass parameters
+    add_bool_arg(parser, 'multiclass', default=True)
     
     return parser.parse_args()
 
@@ -141,6 +144,9 @@ def save_loader_to_json(unlabeled_loader, output_root, filename=None):
         categories += ca
         bboxes += bb
 
+    print(f"[ save_loader_to_json ]: categories = {categories}")
+    print(f"[ save_loader_to_json ]: img_ids = {img_ids}")
+
     # create the new annotations
     for index in range(0, len(img_ids)):
         ann_item = {
@@ -157,6 +163,7 @@ def save_loader_to_json(unlabeled_loader, output_root, filename=None):
 
     # load original json file and save it with just the unlabeled annotations
     gt_file_path = f"{str(unlabeled_loader.dataset.data_dir.parent)}/annotations/instances_train2017.json"
+    print(f"[ save_loader_to_json ]: gt_file_path = {gt_file_path}")
     with open(gt_file_path) as gt_file:
         json_contents = gt_file.read()
     gt_json = json.loads(json_contents)
@@ -176,8 +183,11 @@ def save_loader_to_json(unlabeled_loader, output_root, filename=None):
 
     # write output
     gt_file = f"{output_root}/{filename}.json"
+    print("[ save_loader_to_json ]: gt_file path ", gt_file)
     if os.path.isfile(gt_file):
         os.remove(gt_file)
+    print(f"DEBUG save_loader: primeras 3 annotations = {annotations[:3]}")
+    print(f"DEBUG save_loader: categories en gt_json = {gt_json['categories']}")
     json.dump(gt_json, open(gt_file, 'w'), indent=4)
 
 def get_groundtruth(batch):
@@ -188,11 +198,14 @@ def get_groundtruth(batch):
         img_ids = []
         categories = []
         bboxes = []
+        #print("[ get_groundtruth ]: batch[1]['img_idx'].numel() ", batch[1]['img_idx'].numel())
 
         # batch[1] has the metadata
         for idx in list(range(batch[1]['img_idx'].numel())):
             img_id = batch[1]['img_orig_id'][idx].item()
+            #print(f"[ get_groundtruth ]: img_id = {img_id}")
             bbox_indx = (batch[1]['bbox'][idx].sum(axis=1)>0).nonzero(as_tuple=True)[0].cpu()
+            #print(f"[ get_groundtruth ]: bbox_indx = {bbox_indx}")
             boxes = batch[1]['bbox'][idx][bbox_indx].cpu().tolist()
             classes = batch[1]['cls'][idx][bbox_indx].cpu().tolist()
             classes = [int(i) for i in classes]
@@ -229,6 +242,7 @@ def create_datasets_and_loaders(args):
         labeled_samples=args.ood_labeled_samples,
         unlabeled_samples=args.ood_unlabeled_samples,
         validation_samples=args.ood_validation_samples,
+        balanced_classes=not args.multiclass,  # True cuando es multiclase
     )
     dataset_label = datasets[0]
     dataset_test = datasets[1]

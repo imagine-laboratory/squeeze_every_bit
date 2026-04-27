@@ -28,7 +28,7 @@ def save_inferences_simple(
         # ITERATE: IMAGE
         for idx in list(range(batch[1]['img_idx'].numel())):
             # get foreground samples (from sam predictions)
-            imgs_s, box_coords, scores = sam_model.get_unlabeled_samples(
+            imgs_s, box_coords, scores = sam_model.get_unlabeled_samples( #Habria que ver si el modelo tiene forma de devolver clase y cuales son sus ID
                 batch, idx, trans_norm, use_sam_embeddings
             )
             # accumulate SAM info (inferences)
@@ -126,55 +126,106 @@ def save_inferences_twoclasses(
     imgs_box_coords = []
     imgs_scores = []
     unlabeled_imgs = []
-    for (_,batch) in tqdm(enumerate(unlabeled_loader), total= len(unlabeled_loader)):
 
-        # every batch is a tuple: (torch.imgs , metadata_and_bboxes)
-        # ITERATE: IMAGE
+    for (_, batch) in tqdm(enumerate(unlabeled_loader), total=len(unlabeled_loader)):
         for idx in list(range(batch[1]['img_idx'].numel())):
-            # get foreground samples (from sam predictions)
             imgs_s, box_coords, scores = sam_model.get_unlabeled_samples(
                 batch, idx, trans_norm, use_sam_embeddings
             )
-            # accumulate SAM info (inferences)
             unlabeled_imgs += imgs_s
-            imgs_ids += [batch[1]['img_orig_id'][idx].item()] * len(imgs_s)
+            imgs_ids       += [batch[1]['img_orig_id'][idx].item()] * len(imgs_s)
             imgs_box_coords += box_coords
-            imgs_scores += scores
+            imgs_scores    += scores
 
-    pineapples = 0
-    for idx_,sample in enumerate(unlabeled_imgs):
-        res = fs_model(sample)
-        label = torch.max(res.detach().data, 1)[1].item() #keep index
+    # Verificar si el modelo tiene prototype_labels (multiclase)
+    # o si es la rama original de 2 clases
+    is_multiclass = hasattr(fs_model, 'prototype_labels') and \
+                    len(fs_model.prototype_labels) > 2
 
-        # if class is zero! Currently, this does not work with multi-class
-        if label == 0: # not background
-            pineapples += 1
+    # ── DEBUG ────────────────────────────────────────────────────────
+    print(f"DEBUG save_inferences: is_multiclass={is_multiclass}, "
+          f"total_samples={len(unlabeled_imgs)}")
+    if is_multiclass:
+        print(f"DEBUG save_inferences: prototype_labels={fs_model.prototype_labels.tolist()}")
+    # ────────────────────────────────────────────────────────────────
+
+    count = 0
+    for idx_, sample in enumerate(unlabeled_imgs):
+        res   = fs_model(sample)
+        # índice del prototipo más cercano (posición en self.prototypes)
+        proto_idx = torch.max(res.detach().data, 1)[1].item()
+
+        SCORE_THRESHOLD = 0.5  # ajustable - ===== NO DEJAR ESTO ESTATICO ======
+        if is_multiclass:
+            # ── Rama multiclase ──────────────────────────────────────
+            # Recuperar el label original (0-indexed) desde prototype_labels
+            cls_0indexed = int(fs_model.prototype_labels[proto_idx].item())
+            # Convertir a category_id COCO (1-indexed)
+            cat_id = cls_0indexed + 1
+            # En multiclase aceptamos todas las predicciones
+            # (no hay clase "background" que descartar)
+            accepted = imgs_scores[idx_] >= SCORE_THRESHOLD
+        else:
+            # ── Rama original de 2 clases: intacta ───────────────────
+            if proto_idx == 0:  # not background
+                cat_id   = 1
+                accepted = True
+            else:
+                accepted = False
+
+        if accepted:
             image_result = {
-                'image_id': imgs_ids[idx_],
-                'category_id': 1,
-                'score': imgs_scores[idx_],
-                'bbox': imgs_box_coords[idx_],
+                'image_id':    imgs_ids[idx_],
+                'category_id': cat_id,
+                'score':       imgs_scores[idx_],
+                'bbox':        imgs_box_coords[idx_],
             }
             results.append(image_result)
+            count += 1
 
+    # ── DEBUG distribución de clases predichas ───────────────────────
     if len(results) > 0:
-        # write output
-        #if os.path.exists(filepath):
-        #    os.remove(filepath)
-        #json.dump(results, open(filepath, 'w'), indent=4)
-        if val:
-            f_ = f"{filepath}/bbox_results_val.json"
-            if os.path.exists(f_):
-                os.remove(f_)
-            json.dump(results, open(f_, 'w'), indent=4)
-        else:
-            f_ = f"{filepath}/bbox_results.json"
-            if os.path.exists(f_):
-                os.remove(f_)
-            json.dump(results, open(f_, 'w'), indent=4)
+        from collections import Counter
+        cat_dist = Counter(r['category_id'] for r in results)
+        print(f"DEBUG save_inferences: distribución category_id = {dict(cat_dist)}")
+    print(f"DEBUG save_inferences: count={count}/{len(unlabeled_imgs)}")
+    # ────────────────────────────────────────────────────────────────
+
+    # Escribir siempre el archivo para evitar FileNotFoundError en eval_sam
+    if val:
+        f_ = f"{filepath}/bbox_results_val.json"
+    else:
+        f_ = f"{filepath}/bbox_results.json"
+
+    try:
+        if os.path.exists(f_):
+            os.remove(f_)
+    except OSError as e:
+        print(f"ADVERTENCIA: no se pudo eliminar {f_}: {e}")
+
+    if val:
+        gt_path = f"{filepath}/validation.json"
+    else:
+        gt_path = f"{filepath}/test.json"
+
+    if os.path.isfile(gt_path):
+        with open(gt_path) as f:
+            gt_data = json.load(f)
+        valid_img_ids = set(img['id'] for img in gt_data['images'])
+        results_filtered = [r for r in results if r['image_id'] in valid_img_ids]
+        
+        removed = len(results) - len(results_filtered)
+        if removed > 0:
+            print(f"DEBUG save_inferences: {removed} predicciones eliminadas "
+                  f"por image_id no presentes en GT")
+        results = results_filtered
+
+    json.dump(results, open(f_, 'w'), indent=4)
+    print(f"DEBUG save_inferences: archivo escrito con {len(results)} resultados → {f_}")
 
 def calculate_precision(coco_eval, iou_treshold_index, img_id_size):
-    imgs = coco_eval.evalImgs
+    imgs = coco_eval.evalImgs #Aqui esta variabel tiene un diccionario del desempeño en cada imagen después de hacer .evaluate()
+                              # contiene un valor que es para la categoría
     print("Images len: ", len(imgs))
     count = 0
     fp_total = 0
@@ -220,7 +271,14 @@ def calculate_precision(coco_eval, iou_treshold_index, img_id_size):
         "p_t_gt": float(tp_total/ground_ids)}
 
 def eval_sam(coco_gt, image_ids, pred_json_path, output_root, method="xyz", number=None, val=False):
-    # load results in COCO evaluation tool
+    if not os.path.isfile(pred_json_path):
+        print(f"ERROR eval_sam: {pred_json_path} no existe.")
+        return
+    with open(pred_json_path) as f:
+        pred_data = json.load(f)
+    if len(pred_data) == 0:
+        print(f"ADVERTENCIA eval_sam: archivo vacío, se omite evaluación.")
+        return
     coco_pred = coco_gt.loadRes(pred_json_path)
     # run COCO evaluation
     print('BBox')
@@ -230,7 +288,7 @@ def eval_sam(coco_gt, image_ids, pred_json_path, output_root, method="xyz", numb
     coco_eval.accumulate()
     coco_eval.summarize()
 
-    stats_count = calculate_precision(coco_eval, 0, len(image_ids))
+    stats_count = calculate_precision(coco_eval, 0, len(image_ids)) #En esta función hay que ver como se toma en cuenta la clase
     print("stats count: ", stats_count)
     val_str = ""
     if val:

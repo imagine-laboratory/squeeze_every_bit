@@ -28,14 +28,22 @@ def compute_prototypes(support_features: Tensor, support_labels: Tensor) -> Tens
     Returns:
         for each label of the support set, the average feature vector of instances with this label
     """
-    n_way = len(torch.unique(support_labels))
-    # Prototype i is the mean of all instances of features corresponding to labels == i
-    return torch.cat(
+    unique_labels = torch.unique(support_labels)
+
+    # ── DEBUG ────────────────────────────────────────────────────────
+    print(f"DEBUG compute_prototypes: {len(unique_labels)} clases → {unique_labels.tolist()}")
+    # ────────────────────────────────────────────────────────────────
+
+    prototypes = torch.cat(
         [
             support_features[torch.nonzero(support_labels == label)].mean(0)
-            for label in range(n_way)
+            for label in unique_labels   # itera solo las clases presentes
         ]
     )
+
+    # Guardar mapeo posición_prototipo → label original
+    # Necesario para recuperar category_id en inferencia
+    return prototypes, unique_labels   # ← retorna también los labels
 
 def compute_prototypes_singleclass(support_features: Tensor) -> Tensor:
     """

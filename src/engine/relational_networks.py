@@ -125,7 +125,8 @@ class RelationNetworks(FewShot):
             print("Not implemented!")
         else:
             y_labels = torch.Tensor(y_labels)
-            prototypes = compute_prototypes(support_features, y_labels)
+            prototypes, unique_labels = compute_prototypes(support_features, y_labels)
+        self.prototype_labels = unique_labels        
         self.prototypes = prototypes.to(self.device)
 
     def forward(self, query_image: Tensor) -> Tensor:
@@ -147,7 +148,19 @@ class RelationNetworks(FewShot):
         # Given that query_features is of shape (n_queries, n_channels, width, height), the
         # constructed tensor is of shape (n_queries * n_prototypes, 2 * n_channels, width, height)
         # (2 * n_channels because prototypes and queries are concatenated)
+        print(f"DEBUG relational forward: z_query.shape={z_query.shape}")
+        print(f"DEBUG relational forward: self.prototypes.shape={self.prototypes.shape}")
         print("z_query: ", z_query.shape)
+
+        # ── NUEVO: asegurar que prototypes tenga el mismo nº de dims que z_query ──
+        # prototypes: [n_classes, 2048]
+        # z_query:    [1, 2048, 1, 1]
+        # necesitamos prototypes: [n_classes, 2048, 1, 1]
+        protos = self.prototypes
+        while protos.dim() < z_query.dim():
+            protos = protos.unsqueeze(-1)   # añade dims al final hasta igualar
+        # protos ahora es [n_classes, 2048, 1, 1]
+
         query_prototype_feature_pairs = torch.cat(
             (
                 self.prototypes.unsqueeze(dim=0).expand(

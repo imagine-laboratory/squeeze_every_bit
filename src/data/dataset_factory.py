@@ -156,7 +156,8 @@ def create_dataset(name, root, splits=('train', 'val'), use_semi_split=False, se
 
 
 def create_dataset_ood(name, root, splits=('train'), 
-    seed=None, labeled_samples=1, unlabeled_samples=5, validation_samples=1):
+    seed=None, labeled_samples=1, unlabeled_samples=5, validation_samples=1,
+    balanced_classes=False):
     """
     This method splits the ds, format appropriate for the loader.
 
@@ -175,6 +176,7 @@ def create_dataset_ood(name, root, splits=('train'),
     if isinstance(splits, str):
         splits = (splits,)
     name = name.lower()
+    print("[ create_dataset_ood ]: root path ", root)
     root = Path(root)
     dataset_cls = DetectionDatset
     datasets = OrderedDict()
@@ -189,7 +191,9 @@ def create_dataset_ood(name, root, splits=('train'),
             if s not in dataset_cfg.splits:
                 raise RuntimeError(f'{s} split not found in config')
             split_cfg = dataset_cfg.splits[s]
+            print("[ create_dataset_ood ]: split_cfg ", split_cfg)
             ann_file = root / split_cfg['ann_filename']
+            print("[ create_dataset_ood ]: ann_file ", ann_file)
 
             if s.startswith('train'):
                 #--------------------------------------------
@@ -209,6 +213,7 @@ def create_dataset_ood(name, root, splits=('train'),
                 ids = [item['id'] for item in new_labeled['images']]
                 total_samples = labeled_samples + unlabeled_samples + validation_samples
                 assert total_samples <= len(ids), "size mismatch"
+                print("[ create_dataset_ood ]: total_samples <= len(ids) ", total_samples, len(ids), total_samples <= len(ids))
 
                 # get ids
                 root_ids = f"./seeds/{str(root).split('/')[-1]}/seed{seed}_{labeled_samples}_{unlabeled_samples}_{validation_samples}"
@@ -217,30 +222,101 @@ def create_dataset_ood(name, root, splits=('train'),
                 ids_full_labeled = f"{root_ids}/full_labeled.txt"
                 ids_unlabeled = f"{root_ids}/unlabeled.txt"
                 ids_validation = f"{root_ids}/validation.txt"
+                print("[ create_dataset_ood ]: root_ids ", root_ids)
+                print("[ create_dataset_ood ]: ids_labeled ", ids_labeled)
 
                 if not os.path.isfile(ids_labeled):
-                    if seed is not None:
-                        all_idx = random.Random(seed).sample(ids, k=total_samples)
-                        # get labeled, test, unlabeled, and full labeled sets.
-                        labeled_idx = random.Random(seed).sample(all_idx, k=labeled_samples)
-                        # get validation samples
-                        not_labeled_idx = [i for i in all_idx if i not in labeled_idx]
-                        validation_idx = random.Random(seed).sample(not_labeled_idx, k=validation_samples)
-                        test_idx = [i for i in all_idx if (i not in validation_idx + labeled_idx)]
-                        full_labeled_idx = [i for i in ids if i not in test_idx]
-                        unlabeled_idx = [i for i in full_labeled_idx if i not in labeled_idx]                  
+                    rng = random.Random(seed) if seed is not None else random
+
+                    if balanced_classes:
+                        # ── Rama multiclase: sampling balanceado por clase ──────────
+                        def sample_balanced_labeled(annotations, all_image_ids, n_labeled, rng):
+                            # Convertir a set para búsquedas O(1)
+                            all_image_ids_set = set(all_image_ids)
+
+                            # Construir class_to_imgs directamente en un solo pase
+                            # filtrando solo imágenes relevantes desde el inicio
+                            class_to_imgs = {}
+                            for ann in annotations:
+                                img_id = ann['image_id']
+                                if img_id not in all_image_ids_set:  # O(1) ahora
+                                    continue
+                                cat_id = ann['category_id']
+                                if cat_id not in class_to_imgs:
+                                    class_to_imgs[cat_id] = set()  # set para evitar duplicados
+                                class_to_imgs[cat_id].add(img_id)
+
+                            # Convertir sets a listas para rng.sample
+                            class_to_imgs = {cls: list(imgs) for cls, imgs in class_to_imgs.items()}
+
+                            unique_classes = sorted(class_to_imgs.keys())
+                            n_classes = len(unique_classes)
+                            imgs_per_class = max(1, n_labeled // n_classes)
+
+                            print(f"DEBUG balanced: {n_classes} clases, {imgs_per_class} imgs/clase")
+                            print(f"DEBUG balanced: clases disponibles = {unique_classes}")
+
+                            selected = set()
+                            for cls in unique_classes:
+                                available = [i for i in class_to_imgs[cls] if i not in selected]
+                                k = min(imgs_per_class, len(available))
+                                if k > 0:
+                                    chosen = rng.sample(available, k=k)
+                                    selected.update(chosen)
+                                    print(f"DEBUG balanced: clase {cls} → {k} imgs seleccionadas")
+                                else:
+                                    print(f"ADVERTENCIA balanced: clase {cls} sin imgs disponibles")
+
+                            remaining = [i for i in all_image_ids if i not in selected]
+                            extra_needed = n_labeled - len(selected)
+                            if extra_needed > 0 and len(remaining) > 0:
+                                extra = rng.sample(remaining, k=min(extra_needed, len(remaining)))
+                                selected.update(extra)
+                                print(f"DEBUG balanced: +{len(extra)} imgs extra para completar {n_labeled}")
+
+                            result = list(selected)
+                            print(f"DEBUG balanced: total = {len(result)} imgs")
+                            return result
+
+                        labeled_idx = sample_balanced_labeled(
+                            new_labeled['annotations'], ids, labeled_samples, rng
+                        )
+                        # ───────────────────────────────────────────────────────────
+
                     else:
-                        all_idx = random.sample(ids, k=total_samples)
-                        labeled_idx = random.sample(all_idx, k=labeled_samples)
-                        # get validation samples
-                        not_labeled_idx = [i for i in all_idx if i not in labeled_idx]
-                        validation_idx = random.sample(not_labeled_idx, k=validation_samples)
-                        test_idx = [i for i in all_idx if i not in validation_idx + labeled_idx]
-                        full_labeled_idx = [i for i in ids if i not in test_idx]
-                        unlabeled_idx = [i for i in full_labeled_idx if i not in labeled_idx] 
+                        # ── Rama original single-class: intacta ─────────────────────
+                        all_idx = rng.sample(ids, k=total_samples)
+                        labeled_idx = rng.sample(all_idx, k=labeled_samples)
+                        # ───────────────────────────────────────────────────────────
+
+                    # El resto del split es igual para ambas ramas
+                    not_labeled_idx  = [i for i in ids if i not in labeled_idx]
+                    pool_size        = unlabeled_samples + validation_samples
+                    remaining_pool   = rng.sample(
+                        not_labeled_idx,
+                        k=min(pool_size, len(not_labeled_idx))
+                    )
+                    validation_idx   = rng.sample(
+                        remaining_pool,
+                        k=min(validation_samples, len(remaining_pool))
+                    )
+                    test_idx         = [i for i in remaining_pool if i not in validation_idx]
+                    full_labeled_idx = [i for i in ids if i not in test_idx]
+                    unlabeled_idx    = [i for i in full_labeled_idx if i not in labeled_idx]
+
+                    # ── DEBUG post-split ─────────────────────────────────────────────
+                    labeled_anns = [a for a in new_labeled['annotations'] if a['image_id'] in labeled_idx]
+                    from collections import Counter
+                    class_dist = Counter(a['category_id'] for a in labeled_anns)
+                    print(f"DEBUG post-split: {len(labeled_idx)} imgs labeled, "
+                          f"distribución clases = {dict(sorted(class_dist.items()))}")
+                    print(f"DEBUG post-split: test={len(test_idx)}, "
+                          f"validation={len(validation_idx)}, unlabeled={len(unlabeled_idx)}")
+                    # ────────────────────────────────────────────────────────────────
                     # create folder
                     #ids_labeled.parent.mkdir(exist_ok=True, parents=True)
                     Path(root_ids).mkdir(parents=True, exist_ok=True)
+
                     
                     # save files    
                     with open(ids_labeled, "wb") as fp:
@@ -265,6 +341,17 @@ def create_dataset_ood(name, root, splits=('train'),
                         unlabeled_idx = pickle.load(fp)
                     with open(ids_validation, "rb") as fp:
                         validation_idx = pickle.load(fp)
+                # Añadir después del bloque if/else de ids_labeled (tanto en la rama nueva como al cargar del cache)
+                print(f"DEBUG splits: labeled={len(labeled_idx)}, test={len(test_idx)}, "
+                    f"validation={len(validation_idx)}, unlabeled={len(unlabeled_idx)}")
+                print(f"DEBUG splits: labeled_idx muestra = {sorted(labeled_idx)[:5]}")
+                print(f"DEBUG splits: test_idx muestra = {sorted(test_idx)[:5]}")
+
+                # Verificar que no hay solapamiento
+                overlap_labeled_test = set(labeled_idx) & set(test_idx)
+                overlap_test_val     = set(test_idx) & set(validation_idx)
+                print(f"DEBUG splits: solapamiento labeled∩test = {overlap_labeled_test}")
+                print(f"DEBUG splits: solapamiento test∩validation = {overlap_test_val}")
 
                 # keep just the necessary ids
                 new_labeled['images'] = [i for i in new_labeled['images'] if i['id'] in labeled_idx]
@@ -338,8 +425,17 @@ def create_dataset_ood(name, root, splits=('train'),
                     parser=create_parser(dataset_cfg.parser, cfg=parser_cfg_validation),
                 )
 
+                validation_dataset = datasets[f'{s}_labeled']
+                # Información básica
+                print(f"Nombre del dataset: {s}_labeled")
+                print(f"Tamaño del dataset: {len(validation_dataset)} imágenes")
+                print(f"Tipo de dataset: {type(validation_dataset)}")
+                print(f"Directorio de imágenes: {validation_dataset.data_dir}")
+                print(f"Parser usado: {type(validation_dataset.parser)}")
+
                 
             else:
+                print("[ create_dataset_ood ]: else ")
                 parser_cfg = CocoParserCfg(
                     ann_filename=ann_file,
                     has_labels=split_cfg['has_labels']

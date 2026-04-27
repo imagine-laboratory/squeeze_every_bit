@@ -1,0 +1,49 @@
+8e5455a Revise citation in README for clarity and completeness
+d0b25a0 Create process_outputs.ipynb
+61e78c5 add SAM 2 and SAM 3
+1126943 Update utils.py
+e1362ee add sam 2 and sam 3 constants
+cd0eab3 Delete __init__.cpython-312.pyc
+e69fed7 Delete model_builder.cpython-312.pyc
+78a7d56 add sam 2 for object proposals
+b5bc437 add sam 3 for object proposal
+4040564 Add OOD threshold and histogram bins arguments
+71e5591 Add results section for few-shot learning methods
+6d45063 Update README.md
+192d157 Update README.md
+e86a6a7 Update README.md
+13d614e add  help options
+67493c5 add sam hq weights
+034dbb5 add sam hq object proposal
+ef6dc91 add slimsam
+ccd2be3 add slimsam weights
+b858de6 add slimsam constant
+7e557a6 add slimsam
+698b760 add slimsam
+cf86763 add feature extractor parameter
+fa1bf81 Update methods.py
+d157f63 Update README.md
+54b9b23 Update README.md
+6fbf34d remove unuse code
+6da4f82 add missing get_unlabeled_samples function
+46580e2 remove unuse parameters
+f711845 Update README.md
+f60db66 Update fastsam weight name and extension
+8f7a24c Update README.md
+26f0258 Update requirements.txt
+d262a12 Update README.md
+ecc2518 Update README.md
+03f8e7d Update README.md
+dace82b Update README.md
+98defca Update README.md
+9ef17f2 Update README.md
+aacf607 Update README.md
+e929054 Update README.md
+5ba70a5 Update README.md
+02bf038 init upload
+244cb00 Update README.md
+5c4a645 Update README.md
+0d26d94 update readme
+f64acfa Update README.md
+39b3908 Add files via upload
+fbee6bc Initial commit

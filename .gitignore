@@ -1,0 +1,8 @@
+**/__pycache__/
+*.pyc
+*.bin
+*.model
+*weights
+*venv
+*seeds
+*output

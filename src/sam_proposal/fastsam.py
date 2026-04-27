@@ -33,7 +33,7 @@ class FASTSAM:
         self.use_sam_embeddings = False  # default
 
         # Load FastSAM model for fast segmentation and object proposals
-        self.checkpoint = '/home/rtxmsi1/Downloads/squeeze_every_bit/src/weights/FastSAM-x.pt'
+        self.checkpoint = '/work/naguero/squeeze/squeeze_every_bit/src/weights/FastSAM-x.pt'
         self.model = FastSAM(self.checkpoint)
 
         # Load SAM model if required

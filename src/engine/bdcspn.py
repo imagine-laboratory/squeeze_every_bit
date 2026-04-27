@@ -92,8 +92,9 @@ class BDCSPN(FewShot):
         # get prototypes and save them into cuda memory
         self.support_features = torch.stack(support_features).to(self.device)
         support_labels = torch.Tensor(support_labels)
-        prototypes = compute_prototypes(self.support_features, support_labels)
+        prototypes, unique_labels = compute_prototypes(self.support_features, support_labels)
         self.prototypes = prototypes.to(self.device)
+        self.prototype_labels = unique_labels
         self.support_labels = support_labels
 
     def rectify_prototypes(self, query_features: Tensor):

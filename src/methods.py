@@ -2,6 +2,7 @@
 import warnings
 import torch
 import cv2
+import os
 
 from torch.nn.parallel import DistributedDataParallel as NativeDDP
 
@@ -41,7 +42,7 @@ from engine.bdcspn import BDCSPN
 from engine.ood_filter_neg_likelihood import OOD_filter_neg_likelihood
 from engine.mahalanobis_filter import MahalanobisFilter
 
-from sam_proposal import SAM2, SAM3, FASTSAM, MobileSAM, SAM, SlimSAM, SAMHq#, EdgeSAM
+from sam_proposal import FASTSAM, MobileSAM, SAM, SlimSAM, SAMHq#, EdgeSAM, SAM2, SAM3
 from utils.constants import SamMethod, MainMethod
 #------------------------------------------------------------------------------------------------
 
@@ -70,7 +71,7 @@ def sam_simple(args, output_root):
         sam.load_simple_mask()
     elif args.sam_proposal == SamMethod.FAST_SAM:
         sam = FASTSAM(args)
-        sam.load_simple_mask()
+        sam.load_simple_mask() #
     elif args.sam_proposal == SamMethod.SLIM_SAM:
         sam = SlimSAM(args)
         sam.load_simple_mask()
@@ -161,7 +162,9 @@ def few_shot(args, is_single_class=None, output_root=None, fewshot_method=None):
         feature_extractor = sam
     elif is_single_class:
         feature_extractor = MyFeatureExtractor(
-            args.timm_model, args.load_pretrained, args.num_classes
+            args.timm_model, 
+            args.load_pretrained, 
+            args.num_classes
         )
     else:
         feature_extractor = MyFeatureExtractor(
@@ -219,26 +222,31 @@ def few_shot(args, is_single_class=None, output_root=None, fewshot_method=None):
             )
 
     if is_single_class:
-        # single class does not require background class
         imgs, _ = get_batch_prototypes( 
             labeled_loader, args.num_classes,
-            get_background_samples=False, # single class
+            get_background_samples=False,
             trans_norm=trans_norm,
             use_sam_embeddings=args.use_sam_embeddings
         )
-        #  create the prototypes
-        fs_model.process_support_set(imgs) # just one class
+        fs_model.process_support_set(imgs)
     else:
-        # REQUIRES background class
+        # Multiclase: sin background (igual que Mahalanobis)
+        # El background añade ruido cuando las clases están semánticamente separadas
         imgs, labels = get_batch_prototypes(
-            labeled_loader, args.num_classes, 
-            get_background_samples=True, # two classes
+            labeled_loader, args.num_classes,
+            get_background_samples=False,
             trans_norm=trans_norm,
             use_sam_embeddings=args.use_sam_embeddings
         )
-        # create prototypes
-        # labels start from index 1 to n, translate to start from 0 to n.
-        labels = [i-1 for i in labels]    
+        # labels vienen como category_id COCO (1-N), traducir a 0-indexed
+        labels = [int(i-1) for i in labels]
+
+        # ── DEBUG support set ────────────────────────────────────────
+        from collections import Counter
+        print(f"DEBUG few_shot: {len(imgs)} imgs en support set")
+        print(f"DEBUG few_shot: distribución labels = {dict(sorted(Counter(labels).items()))}")
+        # ────────────────────────────────────────────────────────────
+
         fs_model.process_support_set(imgs, labels)
     
     # STEP 5: classify these inferences using the few-shot model
@@ -302,22 +310,31 @@ def few_shot(args, is_single_class=None, output_root=None, fewshot_method=None):
         )
 
     else:
-        eval_sam(
-            coco_gt, image_ids, res_data, 
-            output_root, method=args.method
-        )
+        print("Antes de eval_____________")
+        for fname, gt_path in [
+            ("bbox_results.json", f"{output_root}/test.json"),
+            ("bbox_results_val.json", f"{output_root}/validation.json")
+        ]:
+            pred_path = f"{output_root}/{fname}"
+            if os.path.isfile(pred_path):
+                with open(pred_path) as f:
+                    preds = json.load(f)
+                with open(gt_path) as f:
+                    gt = json.load(f)
+                pred_ids = set(p['image_id'] for p in preds)
+                gt_ids   = set(img['id'] for img in gt['images'])
+                diff     = pred_ids - gt_ids
+                print(f"DEBUG {fname}: pred_ids={len(pred_ids)}, gt_ids={len(gt_ids)}, diff={diff}")
+            else:
+                print(f"DEBUG {fname}: archivo no existe")
+        # Evaluación unificada — eval_sam ya maneja archivos vacíos
+        eval_sam(coco_gt, image_ids, res_data, output_root, method=args.method)
 
-        # Validation 
-        gt_val_path = f"{output_root}/validation.json"
-        coco_val_gt = COCO(gt_val_path)
+        gt_val_path  = f"{output_root}/validation.json"
+        coco_val_gt  = COCO(gt_val_path)
         image_val_ids = coco_val_gt.getImgIds()[:MAX_IMAGES]
         res_val_data = f"{output_root}/bbox_results_val.json"
-
-        eval_sam(
-            coco_val_gt, image_val_ids, res_val_data, 
-            output_root, method=args.method,
-            val=True
-        )
+        eval_sam(coco_val_gt, image_val_ids, res_val_data, output_root, method=args.method, val=True)
 
 
 def ood_filter(args, output_root):
@@ -543,6 +560,18 @@ def mahalanobis_filter(args, is_single_class=True, output_root=None, dim_red="sv
         dim_red=args.dim_red,
         n_components=args.n_components
     )
+    test_img_ids = []
+    for batch in test_loader:
+        for idx in range(batch[1]['img_idx'].numel()):
+            test_img_ids.append(batch[1]['img_orig_id'][idx].item())
+
+    if os.path.isfile(f"{output_root}/test.json"):
+        with open(f"{output_root}/test.json") as f:
+            test_json = json.load(f)
+        test_json_ids = [img['id'] for img in test_json['images']]
+        print(f"DEBUG: test_loader image_ids = {sorted(test_img_ids)}")
+        print(f"DEBUG: test.json image_ids   = {sorted(test_json_ids)}")
+        print(f"DEBUG: diferencia = {set(test_img_ids) - set(test_json_ids)}")
 
     # run filter using the backbone, sam, and ood
     mahalanobis_filter.run_filter(
@@ -553,29 +582,36 @@ def mahalanobis_filter(args, is_single_class=True, output_root=None, dim_red="sv
     )
 
     # STEP 3: evaluate results
-    if is_single_class:
-        MAX_IMAGES = 100000
-        gt_eval_path = f"{output_root}/test.json"
-        coco_gt = COCO(gt_eval_path)
-        image_ids = coco_gt.getImgIds()[:MAX_IMAGES]
-        res_data = f"{output_root}/bbox_results.json"
+    MAX_IMAGES = 100000
 
-        eval_sam(
-            coco_gt, image_ids, res_data, 
-            output_root, method=args.method,
-        )
+    # Evaluación sobre test
+    gt_eval_path = f"{output_root}/test.json"
+    print("Ruta del GT:", gt_eval_path)
+    coco_gt    = COCO(gt_eval_path)
+    image_ids  = coco_gt.getImgIds()[:MAX_IMAGES]
+    res_data   = f"{output_root}/bbox_results.json"
+    print("Ruta del RES:", res_data)
 
-        gt_eval_path = f"{output_root}/validation.json"
-        coco_eval_gt = COCO(gt_eval_path)
-        image_eval_ids = coco_eval_gt.getImgIds()[:MAX_IMAGES]
-        res_eval_data = f"{output_root}/bbox_results_val.json"
+    with open(res_data) as f:
+        preds = json.load(f)
+    pred_img_ids = set(p['image_id'] for p in preds)
 
-        eval_sam(
-            coco_eval_gt, image_eval_ids, res_eval_data, 
-            output_root, method=args.method, val=True
-        )
-    else:
-        print("No implemented for multiple class mahalanobis!")
+    with open(gt_eval_path) as f:
+        gt = json.load(f)
+    gt_img_ids = set(img['id'] for img in gt['images'])
+
+    diff = pred_img_ids - gt_img_ids
+    print(f"DEBUG eval: pred tiene {len(pred_img_ids)} img_ids únicos")
+    print(f"DEBUG eval: test.json tiene {len(gt_img_ids)} img_ids únicos")
+    print(f"DEBUG eval: image_ids en pred pero NO en GT = {diff}")
+    eval_sam(coco_gt, image_ids, res_data, output_root, method=args.method)
+
+    # Evaluación sobre validación
+    gt_eval_path    = f"{output_root}/validation.json"
+    coco_eval_gt    = COCO(gt_eval_path)
+    image_eval_ids  = coco_eval_gt.getImgIds()[:MAX_IMAGES]
+    res_eval_data   = f"{output_root}/bbox_results_val.json"
+    eval_sam(coco_eval_gt, image_eval_ids, res_eval_data, output_root, method=args.method, val=True)
         
 
 if __name__ == '__main__':
@@ -592,24 +628,33 @@ if __name__ == '__main__':
         output_root = f"{root_output}{args.output_folder}/seed{args.seed}/{args.ood_labeled_samples}_{args.ood_unlabeled_samples}/{args.method}@samEmbed@{args.sam_proposal}"
     else:
         output_root = f"{root_output}{args.output_folder}/seed{args.seed}/{args.ood_labeled_samples}_{args.ood_unlabeled_samples}/{args.method}@{args.timm_model}@{args.sam_proposal}"
-    if args.method == MainMethod.SELECTIVE_SEARCH:
-        output_root = f"{root_output}{args.output_folder}/seed{args.seed}/{args.ood_labeled_samples}_{args.ood_unlabeled_samples}/{args.method}"
-        selective_search(args, output_root)
+    
+    # Creo que este método no tiene el flujo para aplicarlo a multiclase
+#    if args.method == MainMethod.SELECTIVE_SEARCH:
+#        output_root = f"{root_output}{args.output_folder}/seed{args.seed}/{args.ood_labeled_samples}_{args.ood_unlabeled_samples}/{args.method}"
+#        selective_search(args, output_root)
+    # Este tampoco
     if args.method == MainMethod.ALONE:
         output_root = f"{root_output}{args.output_folder}/seed{args.seed}/{args.ood_labeled_samples}_{args.ood_unlabeled_samples}/{args.method}@{args.sam_proposal}"
         sam_simple(args, output_root)
-    elif args.method == MainMethod.FEWSHOT_1_CLASS:
-        few_shot(args, is_single_class=True, output_root=output_root, fewshot_method=args.method)
+
+#Este es igual al siguiente pero con single class true
+#    elif args.method == MainMethod.FEWSHOT_1_CLASS:
+#        few_shot(args, is_single_class=True, output_root=output_root, fewshot_method=args.method)
     elif args.method == MainMethod.FEWSHOT_2_CLASSES:
+        print("[ ####Fewshot### ]", args.multiclass)
         few_shot(args, is_single_class=False, output_root=output_root, fewshot_method=args.method)
+        print("TERMINOOOOO")
     elif args.method == MainMethod.FEWSHOT_OOD:
         ood_filter(args, output_root)
     elif args.method == MainMethod.FEWSHOT_2_CLASSES_RELATIONAL_NETWORK:
         few_shot(args, is_single_class=False, output_root=output_root, fewshot_method=args.method)
-    elif args.method == MainMethod.FEWSHOT_2_CLASSES_MATCHING:
-        few_shot(args, is_single_class=False, output_root=output_root, fewshot_method=args.method)
+    #elif args.method == MainMethod.FEWSHOT_2_CLASSES_MATCHING:
+    #    few_shot(args, is_single_class=False, output_root=output_root, fewshot_method=args.method)
     elif args.method == MainMethod.FEWSHOT_2_CLASSES_BDCSPN:
         few_shot(args, is_single_class=False, output_root=output_root, fewshot_method=args.method)
     elif args.method == MainMethod.FEWSHOT_MAHALANOBIS:
         output_root = f"{root_output}{args.output_folder}/seed{args.seed}/{args.ood_labeled_samples}_{args.ood_unlabeled_samples}/{args.method}_{args.mahalanobis}_beta_{args.beta}_lambda_{args.mahalanobis_lambda}@{args.timm_model}@{args.sam_proposal}@{args.dim_red}_{args.n_components}"
-        mahalanobis_filter(args, is_single_class=True, output_root=output_root, mahalanobis_method=args.mahalanobis, beta=args.beta)
+        mahalanobis_filter(args, is_single_class=args.multiclass, output_root=output_root, mahalanobis_method=args.mahalanobis, beta=args.beta)
+        #last change
+        a = 1

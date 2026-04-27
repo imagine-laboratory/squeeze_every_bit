@@ -191,10 +191,18 @@ class MahalanobisFilter:
         distances = self.mahalanobis_distance(embeddings, self.mean, self.inv_cov)
         mean_value = torch.mean(distances).item()
         std_deviation = torch.std(distances).item()
-        print(distances)
-        print("Mean predicted:", mean_value)
-        print("Standard Deviation predicted:", std_deviation)
         return distances
+
+    def predict_for_class(self, features: torch.Tensor, cls: int) -> torch.Tensor:
+        """Distancia Mahalanobis usando los parámetros de la clase `cls`."""
+        saved_mean    = self.mean
+        saved_inv_cov = self.inv_cov
+        self.mean     = self.class_means[cls]
+        self.inv_cov  = self.class_inv_covs[cls]
+        dist = self.predict(features)
+        self.mean     = saved_mean
+        self.inv_cov  = saved_inv_cov
+        return dist
     
     def fit_svd(self, x, n_components=10):
         self.svd = TruncatedSVD(n_components=n_components)
@@ -232,7 +240,7 @@ class MahalanobisFilter:
                 labeled_imgs += imgs_f
                 labeled_labels += labels_f
                 
-                if get_background_samples:
+                if get_background_samples and self.is_single_class:
                     ss = cv2.ximgproc.segmentation.createSelectiveSearchSegmentation()
 
                     imgs_b, labels_b = get_background(
@@ -244,16 +252,22 @@ class MahalanobisFilter:
         # labels start from index 1 to n, translate to start from 0 to n.
         labels = [int(i-1) for i in labeled_labels]
 
-        # Selecting random 1000 background features for dimensionality reduction
-        if len(back_imgs_context) > 512:
-            back_imgs_context = random.Random(seed).sample(back_imgs_context, 512)
-
-        # get all features maps using: the extractor + the imgs
         all_labeled_features = self.get_all_features(labeled_imgs)
-        all_background_features = self.get_all_features(back_imgs_context)
 
-        all_context_features = all_labeled_features + random.Random(seed).sample(all_background_features, len(all_labeled_features))
-        all_features = all_labeled_features + all_background_features
+        if self.is_single_class:
+            # Rama original intacta
+            if len(back_imgs_context) > 512:
+                back_imgs_context = random.Random(seed).sample(back_imgs_context, 512)
+            all_background_features = self.get_all_features(back_imgs_context)
+            all_context_features = all_labeled_features + random.Random(seed).sample(
+                all_background_features, len(all_labeled_features)
+            )
+            all_features = all_labeled_features + all_background_features
+        else:
+            # Multiclase: contexto = foreground global (todas las clases juntas)
+            all_background_features = []
+            all_context_features = all_labeled_features
+            all_features = all_labeled_features
 
         #----------------------------------------------------------------
         if self.is_single_class:
@@ -298,7 +312,86 @@ class MahalanobisFilter:
             Q3 = np.percentile(distances.numpy(), 75)
             IQR = Q3 - Q1
             threshold = 1.5 * IQR #1.2 * IQR 
-            self.threshold = Q3 + threshold 
+            self.threshold = Q3 + threshold
+
+        else:
+            # Reducción de dimensionalidad compartida
+            if self.dim_red == DimensionalityReductionMethod.SVD:
+                self.fit_svd(all_features.detach().numpy(), n_components=self.n_components)
+                all_labeled_features = torch.Tensor(self.svd.transform(all_labeled_features.detach().numpy()))
+                all_context_features  = torch.Tensor(self.svd.transform(all_context_features.detach().numpy()))
+            elif self.dim_red == DimensionalityReductionMethod.PCA:
+                self.fit_pca(all_features.detach().numpy(), n_components=self.n_components)
+                all_labeled_features = torch.Tensor(self.pca.transform(all_labeled_features.detach().numpy()))
+                all_context_features  = torch.Tensor(self.pca.transform(all_context_features.detach().numpy()))
+
+            self.threshold = float('inf')
+            self.class_means      = {}
+            self.class_inv_covs   = {}
+            self.class_thresholds = {}
+
+            unique_classes = np.unique(labels)
+            print(f"DEBUG run_filter: labels únicos = {unique_classes}")
+            for cls in unique_classes:
+                n = int((labels == cls).sum())
+                print(f"DEBUG run_filter: clase {cls} → {n} samples")
+
+            # ── NUEVO: construir mapeo cls (0-indexed) → category_id COCO (1-indexed) ──
+            # labeled_labels tiene los category_id originales (1-7)
+            # labels tiene esos mismos valores menos 1 (0-6)
+            self.cls_to_category_id = {}
+            for orig_label, shifted_label in zip(labeled_labels, labels):
+                cat_id = int(orig_label)    # category_id COCO original (1-7)
+                cls_key = int(shifted_label) # clave 0-indexed usada en class_means
+                self.cls_to_category_id[cls_key] = cat_id
+            print(f"DEBUG mapeo cls→category_id: {self.cls_to_category_id}")
+
+            for cls in unique_classes:
+                cls_mask     = labels == cls
+                cls_features = all_labeled_features[cls_mask]
+
+                # Mínimo 2 samples para estimar covarianza
+                if cls_features.shape[0] < 2:
+                    print(f"ADVERTENCIA: clase {cls} tiene {cls_features.shape[0]} sample — se omite.")
+                    continue
+
+                if mahalanobis_method == "regularization":
+                    self.fit_regularization(
+                        cls_features, beta=beta,
+                        context_features=all_context_features,
+                        lambda_mahalanobis=lambda_mahalanobis
+                    )
+                else:
+                    self.fit_normal(cls_features)
+
+                # Verificar covarianza válida
+                if torch.isnan(self.inv_cov).any() or torch.isinf(self.inv_cov).any():
+                    print(f"ADVERTENCIA: clase {cls} → inv_cov inválida, se omite.")
+                    continue
+
+                self.class_means[cls]    = self.mean.clone()
+                self.class_inv_covs[cls] = self.inv_cov.clone()
+
+                distances_cls = self.predict(cls_features)
+                distances_np  = distances_cls.numpy()
+
+
+                # Estas líneas deben estar FUERA del if, al mismo nivel
+                Q1       = np.percentile(distances_np, 25)
+                Q3       = np.percentile(distances_np, 75)
+                IQR      = Q3 - Q1
+                max_dist = np.max(distances_np)
+                self.class_thresholds[cls] = Q3 + 1.5 * IQR
+                print(f"DEBUG clase {cls}: Q3={Q3:.3f}, max={max_dist:.3f}, threshold={self.class_thresholds[cls]:.3f}")    
+
+            last_cls     = list(self.class_means.keys())[-1]
+            self.mean    = self.class_means[last_cls]
+            self.inv_cov = self.class_inv_covs[last_cls]
+            # Para stats_count usamos el umbral medio entre clases como referencia
+            distances = torch.cat([
+                self.predict_for_class(all_labeled_features[labels == cls], cls)
+                for cls in self.class_means
+            ])
 
         stats_count = {
             "lambda_support_set": float(lambda_mahalanobis), 
@@ -347,6 +440,9 @@ class MahalanobisFilter:
 
             # get all features maps using: the extractor + the imgs
             featuremaps_list = self.get_all_features(unlabeled_imgs)
+            if len(featuremaps_list) == 0:
+                print(f"DEBUG: batch {batch_num} sin propuestas SAM, se omite.")
+                continue
             featuremaps = torch.stack(featuremaps_list) # e.g. [387 x 512]
 
             # Reduce dimensionality
@@ -356,16 +452,49 @@ class MahalanobisFilter:
                 featuremaps = torch.Tensor(self.pca.transform(featuremaps.detach().numpy()))
 
             # init buffer with distances
-            support_set_distances = []
-            distances = self.predict(featuremaps)
+            if self.is_single_class:
+                # --- Rama original ---
+                distances = self.predict(featuremaps)
+                support_set_distances = distances
 
-            support_set_distances = distances
-            
-            # accumulate
-            if (batch_num == 0):
-                distances_all = support_set_distances
+                # accumulate
+                if (batch_num == 0):
+                    distances_all = support_set_distances
+                else:
+                    distances_all = torch.cat((distances_all, support_set_distances), 0)
+
             else:
-                distances_all = torch.cat((distances_all, support_set_distances), 0)
+                batch_min_distances    = []
+                batch_assigned_classes = []
+
+                for feat in featuremaps:
+                    best_cls  = None
+                    best_dist = float('inf')
+
+                    for cls in self.class_means:
+                        self.mean    = self.class_means[cls]
+                        self.inv_cov = self.class_inv_covs[cls]
+                        dist = self.predict(feat.unsqueeze(0)).item()
+
+                        # Ignorar distancias inválidas o explosivas
+                        if np.isnan(dist) or np.isinf(dist) or dist > 1e5:
+                            continue
+
+                        if dist < best_dist:
+                            best_dist = dist
+                            best_cls  = cls
+
+                    batch_min_distances.append(best_dist if best_cls is not None else float('inf'))
+                    batch_assigned_classes.append(best_cls)
+
+                support_set_distances = torch.tensor(batch_min_distances)
+
+                if batch_num == 0:
+                    distances_all        = support_set_distances
+                    assigned_classes_all = batch_assigned_classes
+                else:
+                    distances_all        = torch.cat((distances_all, support_set_distances), 0)
+                    assigned_classes_all += batch_assigned_classes
 
         # transform data 
         scores = []
@@ -376,28 +505,85 @@ class MahalanobisFilter:
         limit = self.threshold 
         # accumulate results
         results = []
-        print("Scores: ", len(scores))
         count = 0
+        print("Scores: ", len(scores))
+        print(f"DEBUG: Threshold actual: {limit}")
+        if len(scores) > 0:
+            print(f"DEBUG: Score min: {np.min(scores)}, Max: {np.max(scores)}, Mean: {np.mean(scores)}")
+        else:
+            print("DEBUG: ¡OJO! No se generaron scores. Revisa el dataloader o el modelo SAM.")
+
+        if not self.is_single_class:
+            print(f"DEBUG thresholds por clase: {self.class_thresholds}")
         for index, score in enumerate(scores):
-            if(score.item() <= limit):
+            if self.is_single_class:
+                limit    = self.threshold
+                cat_id   = 1
+                accepted = score.item() <= limit
+            else:
+                cls    = assigned_classes_all[index]
+                if cls is None:
+                    continue
+                limit  = self.class_thresholds[cls]
+                # Usar mapeo original en lugar de cls+1
+                cat_id = self.cls_to_category_id[cls]
+                accepted = score.item() <= limit
+
+            if accepted:
                 image_result = {
-                    'image_id': imgs_ids[index],
-                    'category_id': 1, # fix this
-                    'score': imgs_scores[index],
-                    'bbox': imgs_box_coords[index],
+                    'image_id':    imgs_ids[index],
+                    'category_id': cat_id,
+                    'score':       imgs_scores[index],
+                    'bbox':        imgs_box_coords[index],
                 }
                 results.append(image_result)
-                count=count+1
-        print("Count: ", count)
+                count += 1
 
-        if len(results) > 0:
-            # write output
-            results_file = f"{dir_filtered_root}/{result_name}.json"
+        # Debug de distribución de clases asignadas
+        if not self.is_single_class and len(results) > 0:
+            from collections import Counter
+            cat_dist = Counter(r['category_id'] for r in results)
+            print(f"DEBUG evaluate: distribución category_id en results = {dict(cat_dist)}")
 
+        print(f"Count: {count}")
+
+        results_file = f"{dir_filtered_root}/{result_name}.json"
+
+        # Eliminar archivo anterior si existe
+        try:
             if os.path.isfile(results_file):
                 os.remove(results_file)
-            json.dump(results, open(results_file, 'w'), indent=4)
+        except OSError as e:
+            print(f"ADVERTENCIA: no se pudo eliminar archivo anterior ({e})")
 
+        # Escribir con reintentos para tolerar NFS busy
+        max_attempts = 5
+        written = False
+        for attempt in range(max_attempts):
+            try:
+                with open(results_file, 'w') as f:
+                    json.dump(results, f, indent=4)
+                print(f"DEBUG evaluate: archivo escrito con {len(results)} resultados → {results_file}")
+                written = True
+                break
+            except OSError as e:
+                print(f"ADVERTENCIA escritura intento {attempt+1}/{max_attempts}: {e}")
+                if attempt < max_attempts - 1:
+                    import time
+                    time.sleep(1)
+
+        if not written:
+            # Último recurso: path alternativo
+            fallback = f"{dir_filtered_root}/{result_name}_fallback.json"
+            with open(fallback, 'w') as f:
+                json.dump(results, f, indent=4)
+            import shutil
+            shutil.copy2(fallback, results_file)
+            print(f"DEBUG evaluate: archivo escrito via fallback → {results_file}")
+
+        if len(results) == 0:
+            print("ADVERTENCIA: bbox_results vacío. El archivo existe pero no tiene predicciones.")
+            
     def save_stats(self, dir_filtered_root, stats):
         file_name_stats = f"{dir_filtered_root}/stats.json"
         with open(file_name_stats, 'w') as file:

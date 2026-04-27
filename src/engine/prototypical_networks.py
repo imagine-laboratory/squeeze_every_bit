@@ -100,8 +100,9 @@ class PrototypicalNetworks(FewShot):
             prototypes = prototypes.unsqueeze(dim=0) # 2D tensor
         else:
             support_labels = torch.Tensor(lbl_1)
-            prototypes = compute_prototypes(support_features, support_labels)
+            prototypes, unique_labels = compute_prototypes(support_features, support_labels)
         self.prototypes = prototypes.to(self.device)
+        self.prototype_labels = unique_labels
 
         #---------------------------------------
         if self.is_single_class:

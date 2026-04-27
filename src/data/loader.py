@@ -200,6 +200,7 @@ def create_loader(
         # The default dataset outputs PIL Image and dict of numpy ndarrays or python scalar annotations.
         # The fast collate fn accepts ONLY numpy uint8 images and annotations dicts of ndarrays and python scalars
         transform = transform_fn
+        print("[ create_loader ]: Usando transform_fn personalizada")
     else:
         if is_training:
             transform = transforms_coco_train(
