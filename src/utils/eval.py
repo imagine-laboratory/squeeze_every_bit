@@ -224,51 +224,51 @@ def save_inferences_twoclasses(
     print(f"DEBUG save_inferences: archivo escrito con {len(results)} resultados → {f_}")
 
 def calculate_precision(coco_eval, iou_treshold_index, img_id_size):
-    imgs = coco_eval.evalImgs #Aqui esta variabel tiene un diccionario del desempeño en cada imagen después de hacer .evaluate()
-                              # contiene un valor que es para la categoría
+    imgs = coco_eval.evalImgs
     print("Images len: ", len(imgs))
-    count = 0
-    fp_total = 0
-    tp_total = 0 
-    detection_ids = 0 
-    ground_ids = 0 
-    valid_fp_tp = 0
+
+    fp_total      = 0
+    tp_total      = 0
+    detection_ids = 0
+    ground_ids    = 0
+
+    # evalImgs tiene una entrada por (image_id, category_id)
+    # En single-class: len(evalImgs) == img_id_size
+    # En multiclase:   len(evalImgs) == img_id_size * n_classes
+    # Por eso NO se usa count == img_id_size como límite —
+    # se procesan TODAS las entradas válidas independientemente del número de clases
 
     for img in imgs:
-        if img == None:
-            continue 
-        if count == img_id_size:
-            break 
-        else:
-            detection_ignore = img["dtIgnore"][iou_treshold_index]
-            mask = ~detection_ignore
-            tp = (img["dtMatches"][iou_treshold_index][mask] > 0).sum()
-            fp = (img["dtMatches"][iou_treshold_index][mask] == 0).sum()
+        if img is None:
+            continue
 
-            gtIds_len = len(img['gtIds'])
-            dtIds_len = len(img['dtIds'])
- 
-            count = count+1
+        detection_ignore = img["dtIgnore"][iou_treshold_index]
+        mask = ~detection_ignore
+        tp = (img["dtMatches"][iou_treshold_index][mask] > 0).sum()
+        fp = (img["dtMatches"][iou_treshold_index][mask] == 0).sum()
 
-            fp_total = fp_total + fp
-            tp_total = tp_total + tp
-            detection_ids = detection_ids + dtIds_len
-            ground_ids = ground_ids + gtIds_len
-            valid_fp_tp = valid_fp_tp + fp+tp
+        gtIds_len = len(img['gtIds'])
+        dtIds_len = len(img['dtIds'])
 
-    #print("Amount of images:    ", img_id_size)
-    #print("Len of detection:    ", detection_ids)
-    #print("Len of ground truth: ", ground_ids)
-    #print("True Positive:       ", tp_total)
-    #print("False Positive:      ", fp_total)
+        fp_total      += fp
+        tp_total      += tp
+        detection_ids += dtIds_len
+        ground_ids    += gtIds_len
+
+    # Proteger contra división por cero cuando no hay GT
+    p_dt_gt = float(detection_ids / ground_ids) if ground_ids > 0 else 0.0
+    p_t_gt  = float(tp_total / ground_ids)      if ground_ids > 0 else 0.0
+
     return {
-        "amount_imgs": int(img_id_size), 
-        "detection_ids": int(detection_ids), 
-        "ground_truth_ids": int(ground_ids), 
-        "tp": int(tp_total), "fp": int(fp_total), 
+        "amount_imgs":        int(img_id_size),
+        "detection_ids":      int(detection_ids),
+        "ground_truth_ids":   int(ground_ids),
+        "tp":                 int(tp_total),
+        "fp":                 int(fp_total),
         "iou_treshold_index": int(iou_treshold_index),
-        "p_dt_gt": float(detection_ids/ground_ids),
-        "p_t_gt": float(tp_total/ground_ids)}
+        "p_dt_gt":            p_dt_gt,
+        "p_t_gt":             p_t_gt
+    }
 
 def eval_sam(coco_gt, image_ids, pred_json_path, output_root, method="xyz", number=None, val=False):
     if not os.path.isfile(pred_json_path):

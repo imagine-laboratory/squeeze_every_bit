@@ -154,6 +154,81 @@ def create_dataset(name, root, splits=('train', 'val'), use_semi_split=False, se
     datasets = list(datasets.values())
     return datasets if len(datasets) > 1 else datasets[0]
 
+def _sample_balanced_labeled(annotations, all_image_ids, n_labeled, rng):
+    """
+    Selecciona imágenes del labeled set garantizando cobertura balanceada por clase.
+    
+    Estrategia en dos fases:
+      Fase 1 — Stratified sampling: selecciona floor(n_labeled / n_classes) imágenes
+               por clase, garantizando que todas las clases tengan representación.
+      Fase 2 — Completar: si quedan cupos disponibles después de la fase 1,
+               se rellenan aleatoriamente con imágenes restantes sin restricción de clase.
+
+    Params:
+        annotations   (list[dict]) : lista de anotaciones COCO con 'image_id' y 'category_id'.
+        all_image_ids (list[int])  : todos los image_id disponibles en el dataset.
+        n_labeled     (int)        : número total de imágenes a seleccionar.
+        rng           (Random)     : instancia de random con seed fijo para reproducibilidad.
+
+    Returns:
+        list[int]: lista de image_id seleccionados con cobertura balanceada por clase.
+    """
+    # Convertir a set para búsquedas O(1) en lugar de O(n)
+    all_image_ids_set = set(all_image_ids)
+
+    # Construir mapa clase → imágenes disponibles en un solo pase sobre las anotaciones.
+    # Cada image_id se añade al set de su clase (set evita duplicados si hay
+    # múltiples anotaciones de la misma clase en la misma imagen).
+    class_to_imgs = {}
+    for ann in annotations:
+        img_id = ann['image_id']
+        # Ignorar anotaciones de imágenes fuera del pool disponible
+        if img_id not in all_image_ids_set:
+            continue
+        cat_id = ann['category_id']
+        if cat_id not in class_to_imgs:
+            class_to_imgs[cat_id] = set()
+        # Añadir la imagen al set de su clase (sin duplicados)
+        class_to_imgs[cat_id].add(img_id)
+
+    # Convertir sets a listas para poder usar rng.sample
+    class_to_imgs   = {cls: list(imgs) for cls, imgs in class_to_imgs.items()}
+    unique_classes  = sorted(class_to_imgs.keys())
+    n_classes       = len(unique_classes)
+    imgs_per_class  = max(1, n_labeled // n_classes)
+
+    print(f"  [balanced_sample] {n_classes} clases detectadas, objetivo: {imgs_per_class} imgs/clase")
+    print(f"  [balanced_sample] Clases disponibles: {unique_classes}")
+
+    selected = set()
+
+    # Fase 1: seleccionar imgs_per_class imágenes por cada clase.
+    # En cada iteración se excluyen imágenes ya seleccionadas para evitar
+    # que una imagen con múltiples clases cuente doble.
+    for cls in unique_classes:
+        # Excluir imágenes ya asignadas a otras clases en iteraciones anteriores
+        available = [i for i in class_to_imgs[cls] if i not in selected]
+        k = min(imgs_per_class, len(available))
+        if k > 0:
+            chosen = rng.sample(available, k=k)
+            selected.update(chosen)
+            print(f"  [balanced_sample] Clase {cls}: {k} imágenes seleccionadas")
+        else:
+            print(f"  [balanced_sample] ADVERTENCIA clase {cls}: sin imágenes disponibles")
+
+    # Fase 2: completar hasta n_labeled con imágenes aleatorias no seleccionadas.
+    # Esto ocurre cuando n_labeled > n_classes * imgs_per_class (cupos sobrantes).
+    remaining    = [i for i in all_image_ids if i not in selected]
+    extra_needed = n_labeled - len(selected)
+    if extra_needed > 0 and len(remaining) > 0:
+        extra = rng.sample(remaining, k=min(extra_needed, len(remaining)))
+        selected.update(extra)
+        print(f"  [balanced_sample] +{len(extra)} imágenes extra para completar {n_labeled}")
+
+    result = list(selected)
+    print(f"  [balanced_sample] Total seleccionadas: {len(result)} imágenes")
+    return result
+
 
 def create_dataset_ood(name, root, splits=('train'), 
     seed=None, labeled_samples=1, unlabeled_samples=5, validation_samples=1,
@@ -216,7 +291,7 @@ def create_dataset_ood(name, root, splits=('train'),
                 print("[ create_dataset_ood ]: total_samples <= len(ids) ", total_samples, len(ids), total_samples <= len(ids))
 
                 # get ids
-                root_ids = f"./seeds/{str(root).split('/')[-1]}/seed{seed}_{labeled_samples}_{unlabeled_samples}_{validation_samples}"
+                root_ids = root_ids = Path("seeds") / root.name / f"seed{seed}_{labeled_samples}_{unlabeled_samples}_{validation_samples}"
                 ids_labeled = f"{root_ids}/labeled.txt"
                 ids_test = f"{root_ids}/test.txt"
                 ids_full_labeled = f"{root_ids}/full_labeled.txt"
@@ -315,7 +390,7 @@ def create_dataset_ood(name, root, splits=('train'),
                     # ────────────────────────────────────────────────────────────────
                     # create folder
                     #ids_labeled.parent.mkdir(exist_ok=True, parents=True)
-                    Path(root_ids).mkdir(parents=True, exist_ok=True)
+                    root_ids.mkdir(parents=True, exist_ok=True)
 
                     
                     # save files    

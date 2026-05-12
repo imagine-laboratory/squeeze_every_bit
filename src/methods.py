@@ -436,81 +436,6 @@ def ood_filter(args, output_root):
             number=idx_, val=True
         )
 
-def selective_search(args, output_root):
-    """ Run selective search (ss) and stores the results.
-    Params
-    :args -> parameters from bash.
-    :output_root (str) -> output folder location.
-    """
-    # STEP 1: create data loaders
-    # the loaders will load the images in numpy arrays
-    _, test_loader,_,_,_ = create_datasets_and_loaders(args)
-    # save new gt into a separate json file
-    if not os.path.exists(output_root):
-        os.makedirs(output_root)
-    # save gt
-    save_loader_to_json(test_loader, output_root, "test")
-
-    # STEP 2: run inferences using selective search
-    results = []
-    imgs_ids = []
-    imgs_box_coords = []
-    imgs_scores = []
-    max = 100
-    ss = cv2.ximgproc.segmentation.createSelectiveSearchSegmentation()
-    for (_,batch) in tqdm(enumerate(test_loader), total= len(test_loader)):
-
-        # every batch is a tuple: (torch.imgs , metadata_and_bboxes)
-        # ITERATE: IMAGE
-        for idx in list(range(batch[1]['img_idx'].numel())):
-            # run ss over the current img
-            # a. get image
-            image = batch[0][idx].cpu().numpy().transpose(1,2,0)
-            # b. to pil
-            img_pil = Image.fromarray(image)
-            # c. convert RGB to BGR and apply selective search (ss)
-            open_cv_image = np.array(img_pil)[:, :, ::-1].copy() 
-            # d. run ss
-            ss.setBaseImage(open_cv_image)
-            ss.switchToSelectiveSearchFast()
-            proposals = ss.process()
-
-            # e. store metadata
-            for num,proposal in enumerate(proposals):
-                imgs_box_coords += [proposal.tolist()]
-                imgs_scores += [1]
-
-                if (num + 1) >= max:
-                    break
-            imgs_ids += [batch[1]['img_orig_id'][idx].item()] * max
-    
-    for idx_,_ in enumerate(imgs_ids):
-        image_result = {
-            'image_id': imgs_ids[idx_],
-            'category_id': 1,
-            'score': imgs_scores[idx_],
-            'bbox': imgs_box_coords[idx_],
-        }
-        results.append(image_result)
-    
-    filepath = f"{output_root}/bbox_results.json"
-    if len(results) > 0:
-        # write output
-        if os.path.exists(filepath):
-            os.remove(filepath)
-        json.dump(results, open(filepath, 'w'), indent=4)
-
-    # STEP 3: evaluate results
-    MAX_IMAGES = 100000
-    gt_eval_path = f"{output_root}/test.json"
-    coco_gt = COCO(gt_eval_path)
-    image_ids = coco_gt.getImgIds()[:MAX_IMAGES]
-    res_data = f"{output_root}/bbox_results.json"
-
-    eval_sam(
-        coco_gt, image_ids, res_data, 
-        output_root, method=args.method
-    )
 
 def mahalanobis_filter(args, is_single_class=True, output_root=None, dim_red="svd", n_components=10, mahalanobis_method="regularization", beta=1):
     """ Use sam and fewshot (maximum likelihood) to classify masks.
@@ -560,18 +485,7 @@ def mahalanobis_filter(args, is_single_class=True, output_root=None, dim_red="sv
         dim_red=args.dim_red,
         n_components=args.n_components
     )
-    test_img_ids = []
-    for batch in test_loader:
-        for idx in range(batch[1]['img_idx'].numel()):
-            test_img_ids.append(batch[1]['img_orig_id'][idx].item())
-
-    if os.path.isfile(f"{output_root}/test.json"):
-        with open(f"{output_root}/test.json") as f:
-            test_json = json.load(f)
-        test_json_ids = [img['id'] for img in test_json['images']]
-        print(f"DEBUG: test_loader image_ids = {sorted(test_img_ids)}")
-        print(f"DEBUG: test.json image_ids   = {sorted(test_json_ids)}")
-        print(f"DEBUG: diferencia = {set(test_img_ids) - set(test_json_ids)}")
+    print("Flujo multiclass C ", args.multiclass)
 
     # run filter using the backbone, sam, and ood
     mahalanobis_filter.run_filter(
@@ -592,18 +506,38 @@ def mahalanobis_filter(args, is_single_class=True, output_root=None, dim_red="sv
     res_data   = f"{output_root}/bbox_results.json"
     print("Ruta del RES:", res_data)
 
+    res_data = f"{output_root}/bbox_results.json"
+    print(f"DEBUG: archivo bbox_results.json modificado = {os.path.getmtime(res_data)}")
+    print(f"DEBUG: tamaño = {os.path.getsize(res_data)} bytes")
     with open(res_data) as f:
         preds = json.load(f)
     pred_img_ids = set(p['image_id'] for p in preds)
 
     with open(gt_eval_path) as f:
         gt = json.load(f)
-    gt_img_ids = set(img['id'] for img in gt['images'])
 
-    diff = pred_img_ids - gt_img_ids
-    print(f"DEBUG eval: pred tiene {len(pred_img_ids)} img_ids únicos")
-    print(f"DEBUG eval: test.json tiene {len(gt_img_ids)} img_ids únicos")
-    print(f"DEBUG eval: image_ids en pred pero NO en GT = {diff}")
+
+
+    gt_eval_path    = f"{output_root}/validation.json"
+    coco_eval_gt    = COCO(gt_eval_path)
+    image_eval_ids  = coco_eval_gt.getImgIds()[:MAX_IMAGES]
+    res_eval_data   = f"{output_root}/bbox_results_val.json"
+
+    # AGREGA ESTO:
+    with open(gt_eval_path) as f:
+        val_gt = json.load(f)
+    print(f"DEBUG val: imágenes en validation.json = {len(val_gt['images'])}")
+    print(f"DEBUG val: anotaciones en validation.json = {len(val_gt['annotations'])}")
+    print(f"DEBUG val: image_eval_ids = {image_eval_ids}")
+
+    with open(res_eval_data) as f:
+        val_preds = json.load(f)
+    print(f"DEBUG val: predicciones en bbox_results_val.json = {len(val_preds)}")
+
+
+
+
+
     eval_sam(coco_gt, image_ids, res_data, output_root, method=args.method)
 
     # Evaluación sobre validación
@@ -638,9 +572,6 @@ if __name__ == '__main__':
         output_root = f"{root_output}{args.output_folder}/seed{args.seed}/{args.ood_labeled_samples}_{args.ood_unlabeled_samples}/{args.method}@{args.sam_proposal}"
         sam_simple(args, output_root)
 
-#Este es igual al siguiente pero con single class true
-#    elif args.method == MainMethod.FEWSHOT_1_CLASS:
-#        few_shot(args, is_single_class=True, output_root=output_root, fewshot_method=args.method)
     elif args.method == MainMethod.FEWSHOT_2_CLASSES:
         print("[ ####Fewshot### ]", args.multiclass)
         few_shot(args, is_single_class=False, output_root=output_root, fewshot_method=args.method)
@@ -655,6 +586,5 @@ if __name__ == '__main__':
         few_shot(args, is_single_class=False, output_root=output_root, fewshot_method=args.method)
     elif args.method == MainMethod.FEWSHOT_MAHALANOBIS:
         output_root = f"{root_output}{args.output_folder}/seed{args.seed}/{args.ood_labeled_samples}_{args.ood_unlabeled_samples}/{args.method}_{args.mahalanobis}_beta_{args.beta}_lambda_{args.mahalanobis_lambda}@{args.timm_model}@{args.sam_proposal}@{args.dim_red}_{args.n_components}"
-        mahalanobis_filter(args, is_single_class=args.multiclass, output_root=output_root, mahalanobis_method=args.mahalanobis, beta=args.beta)
-        #last change
-        a = 1
+        print("Flujo multiclass A ", args.multiclass)
+        mahalanobis_filter(args, is_single_class=not args.multiclass, output_root=output_root, mahalanobis_method=args.mahalanobis, beta=args.beta)

@@ -144,9 +144,6 @@ def save_loader_to_json(unlabeled_loader, output_root, filename=None):
         categories += ca
         bboxes += bb
 
-    print(f"[ save_loader_to_json ]: categories = {categories}")
-    print(f"[ save_loader_to_json ]: img_ids = {img_ids}")
-
     # create the new annotations
     for index in range(0, len(img_ids)):
         ann_item = {
@@ -188,6 +185,10 @@ def save_loader_to_json(unlabeled_loader, output_root, filename=None):
         os.remove(gt_file)
     print(f"DEBUG save_loader: primeras 3 annotations = {annotations[:3]}")
     print(f"DEBUG save_loader: categories en gt_json = {gt_json['categories']}")
+    print(f"DEBUG: img_ids que llegan al loader = {sorted(set(img_ids))}")
+    print(f"DEBUG: img_ids que quedan en test.json = {sorted([i['id'] for i in gt_json['images']])}")
+    print(f"DEBUG: ¿está 472 en img_ids? {472 in img_ids}")
+    print(f"DEBUG: ¿está 472 en gt_json images? {any(i['id'] == 472 for i in gt_json['images'])}")
     json.dump(gt_json, open(gt_file, 'w'), indent=4)
 
 def get_groundtruth(batch):
@@ -229,68 +230,110 @@ def get_groundtruth(batch):
         return img_ids, categories, bboxes_xywh
 
 def create_datasets_and_loaders(args):
-    """ Setup datasets, transforms, loaders, evaluator.
-    Params
-    :args -> Model specific configuration dict / struct
-
-    Returns
-    :loaders
     """
+    Crea los datasets y sus DataLoaders correspondientes para el pipeline few-shot.
+
+    Llama a create_dataset_ood para obtener los 5 subconjuntos del dataset
+    (labeled, test, unlabeled, full_labeled, validation) y los envuelve en
+    DataLoaders con la configuración de resolución, batch size y transformaciones
+    especificada en args.
+
+    Params:
+        args: Namespace de argparse con los siguientes campos relevantes:
+            - args.dataset              (str)  : nombre del dataset ('coco17', etc.)
+            - args.root                 (str)  : ruta raíz del dataset
+            - args.seed                 (int)  : semilla para reproducibilidad
+            - args.ood_labeled_samples  (int)  : tamaño del labeled set
+            - args.ood_unlabeled_samples(int)  : tamaño del test/unlabeled set
+            - args.ood_validation_samples(int) : tamaño del validation set
+            - args.multiclass           (bool) : si True, usa sampling balanceado por clase
+            - args.img_resolution       (int)  : resolución de las imágenes
+            - args.batch_size_labeled   (int)  : batch size del loader labeled
+            - args.batch_size_unlabeled (int)  : batch size de test y unlabeled
+            - args.batch_size_validation(int)  : batch size del loader validation
+
+    Returns:
+        tuple: (loader_label, loader_test, loader_unlabel, loader_full_label, loader_validation)
+            - loader_label      : DataLoader del support set etiquetado
+            - loader_test       : DataLoader del conjunto de test
+            - loader_unlabel    : DataLoader del conjunto sin etiquetas
+            - loader_full_label : DataLoader del labeled + unlabeled combinados
+            - loader_validation : DataLoader del conjunto de validación
+    """
+    # Crear los 5 subconjuntos del dataset.
+    # balanced_classes=args.multiclass activa el sampling estratificado por clase
+    # cuando se ejecuta en modo multiclase (--no-multiclass en CLI → args.multiclass=False).
     datasets = create_dataset_ood(
-        args.dataset, args.root, 
+        args.dataset, args.root,
         seed=args.seed,
         labeled_samples=args.ood_labeled_samples,
         unlabeled_samples=args.ood_unlabeled_samples,
         validation_samples=args.ood_validation_samples,
-        balanced_classes=not args.multiclass,  # True cuando es multiclase
+        balanced_classes=args.multiclass,
     )
-    dataset_label = datasets[0]
-    dataset_test = datasets[1]
-    dataset_unlabel = datasets[2]
-    dataset_full_label = datasets[3]
-    dataset_validation = datasets[4]
 
-    # create data loaders
-    trans_numpy = transforms_toNumpy()
-    normalize_imgs = False
+    # Desempaquetar los 5 datasets en el orden definido por create_dataset_ood
+    dataset_label, dataset_test, dataset_unlabel, dataset_full_label, dataset_validation = datasets
+
+    # Transformación compartida: convierte tensores a numpy para compatibilidad
+    # con SAM y los métodos de extracción de features que esperan arrays numpy.
+    trans_numpy    = transforms_toNumpy()
+    normalize_imgs = False  # La normalización se aplica dentro de cada modelo
+
+    # ── Crear DataLoaders ─────────────────────────────────────────────────────
+    # Todos los loaders usan is_training=False porque no hay fine-tuning.
+    # El batch_size varía según el subconjunto:
+    #   - labeled: batch pequeño (típicamente 1-4) porque tiene pocas imágenes
+    #   - test/unlabeled: batch más grande para inferencia eficiente
+    #   - validation: batch configurable independientemente
+
     loader_label = create_loader(
         dataset_label,
         img_resolution=args.img_resolution,
         batch_size=args.batch_size_labeled,
         is_training=False,
-        transform_fn = trans_numpy,
+        transform_fn=trans_numpy,
         normalize_img=normalize_imgs
     )
+
+    # loader_test contiene las imágenes contra las que se evalúa el mAP final.
+    # Sus image_id deben coincidir exactamente con los de test.json.
     loader_test = create_loader(
         dataset_test,
         img_resolution=args.img_resolution,
         batch_size=args.batch_size_unlabeled,
         is_training=False,
-        transform_fn = trans_numpy,
+        transform_fn=trans_numpy,
         normalize_img=normalize_imgs
     )
+
     loader_unlabel = create_loader(
         dataset_unlabel,
         img_resolution=args.img_resolution,
         batch_size=args.batch_size_unlabeled,
         is_training=False,
-        transform_fn = trans_numpy,
+        transform_fn=trans_numpy,
         normalize_img=normalize_imgs
     )
+
     loader_full_label = create_loader(
         dataset_full_label,
         img_resolution=args.img_resolution,
         batch_size=args.batch_size_unlabeled,
         is_training=False,
-        transform_fn = trans_numpy,
+        transform_fn=trans_numpy,
         normalize_img=normalize_imgs
     )
+
+    # loader_validation contiene las imágenes contra las que se evalúa mAP_val.
+    # Sus image_id deben coincidir exactamente con los de validation.json.
     loader_validation = create_loader(
         dataset_validation,
         img_resolution=args.img_resolution,
         batch_size=args.batch_size_validation,
         is_training=False,
-        transform_fn = trans_numpy,
+        transform_fn=trans_numpy,
         normalize_img=normalize_imgs
     )
+
     return loader_label, loader_test, loader_unlabel, loader_full_label, loader_validation
