@@ -189,7 +189,7 @@ class MahalanobisFilter:
             print("The matrix is neither positive definite nor positive semi-definite.")
 
 
-        return inv_cov, 
+        return inv_cov
 
         
     @staticmethod
@@ -232,10 +232,10 @@ class MahalanobisFilter:
         distances = self.mahalanobis_distance(embeddings, cls_mean, cls_inv_cov)
         mean_value = torch.mean(distances).item()
         std_deviation = torch.std(distances).item()
-        print(f"Flow8: distancias Mahalanobis del support set, mean, std para la clase {self.crr_cls_print}")
-        print(distances)
-        print("Mean predicted:", mean_value)
-        print("Standard Deviation predicted:", std_deviation)
+        #print(f"Flow8: distancias Mahalanobis del support set, mean, std para la clase {self.crr_cls_print}")
+        #print(distances)
+        #print("Mean predicted:", mean_value)
+        #print("Standard Deviation predicted:", std_deviation)
         return distances
     
     def fit_svd(self, x, n_components=10):
@@ -385,7 +385,7 @@ class MahalanobisFilter:
             distances = self.predict(all_labeled_features)
 
         else:
-            distances, means, inv_covs, thresholds, _ = self._fit_multiclass(
+            distances, means, inv_covs, thresholds, cls_to_category_id, all_svd = self._fit_multiclass(
                 all_features, all_labeled_features, all_context_features,
                 labels, labeled_labels,
                 mahalanobis_method, beta, lambda_mahalanobis
@@ -398,7 +398,7 @@ class MahalanobisFilter:
             "lambda_support_set"  : float(lambda_mahalanobis),
             "labeled"             : int(all_labeled_features.shape[0]),
             "dimension"           : int(dim_original),
-            "reduced_dimension"   : int(all_labeled_features.shape[1]),
+            "reduced_dimension"   : int(all_svd.shape[1]),
             "all"                 : int(all_features.shape[0]),
             "context"             : int(all_context_features.shape[0]),
         }
@@ -428,9 +428,8 @@ class MahalanobisFilter:
         # evaluate itera el loader, genera propuestas SAM, calcula
         # distancias Mahalanobis y filtra por threshold → bbox_results.json
         # ─────────────────────────────────────────────────────────────────
-        self.evaluate(unlabeled_loader,  dir_filtered_root, "bbox_results")
-        self.evaluate(validation_loader, dir_filtered_root, "bbox_results_val")
-        
+        self.evaluate(unlabeled_loader,  dir_filtered_root, "bbox_results", means, inv_covs, thresholds, cls_to_category_id)
+        self.evaluate(validation_loader, dir_filtered_root, "bbox_results_val", means, inv_covs, thresholds, cls_to_category_id)
 
     def _fit_multiclass(self, all_features, all_labeled_features, all_context_features,
                         labels, labeled_labels,
@@ -549,9 +548,9 @@ class MahalanobisFilter:
             
         
         print(f"|===============Flow10: resultados finales por clase de fit===============")
-        print(f"Clases {json.dumps(class_means, indent=4, sort_keys=True)}")
-        print(f"Clases {json.dumps(class_inv_covs, indent=4, sort_keys=True)}")
-        print(f"Clases {json.dumps(class_thresholds, indent=4, sort_keys=True)}")
+        print(f"Clases (Medias - muestra 5 val): {json.dumps({int(k): v.tolist()[:5] for k, v in class_means.items()}, indent=4)}")
+        print(f"Class inv covs (Muestra 2x2): {json.dumps({int(k): v[:2, :2].tolist() for k, v in class_inv_covs.items()}, indent=4)}")
+        print(f"Thresholds: {json.dumps({int(k): float(v) for k, v in class_thresholds.items()}, indent=4)}")
 
         if len(class_means) == 0:
             raise RuntimeError(
@@ -559,9 +558,9 @@ class MahalanobisFilter:
                 f"Necesitas >= 2 samples por clase."
             )
 
-        return class_distances, class_means, class_inv_covs, class_thresholds, cls_to_category_id
+        return class_distances, class_means, class_inv_covs, class_thresholds, cls_to_category_id, all_labeled_features
 
-    def evaluate(self, dataloader, dir_filtered_root, result_name):
+    def evaluate(self, dataloader, dir_filtered_root, result_name, class_means=None, class_inv_covs=None, class_thresholds=None, cls_to_category_id=None):
         """
         Aplica el filtro Mahalanobis sobre un dataloader usando propuestas de SAM.
         Para cada imagen genera regiones candidatas con SAM, extrae sus features,
@@ -629,10 +628,6 @@ class MahalanobisFilter:
 
             # ─────────────────────────────────────────────────────────────
             # PASO 3: Calcular distancias Mahalanobis
-            #
-            # Single-class: una sola distancia al prototipo global
-            #   predict: dist(feat, self.mean, self.inv_cov)
-            #
             # Multiclase: nearest-centroid en espacio Mahalanobis
             #   Para cada feature, calcular distancia a cada clase
             #   y asignar la clase con menor distancia
@@ -652,10 +647,11 @@ class MahalanobisFilter:
                     # Por cada clase entrenada: calcular distancia Mahalanobis
                     # usando los parámetros específicos de esa clase
                     # predict: usa temporalmente self.mean y self.inv_cov de cls
-                    for cls in self.class_means:
-                        self.mean    = self.class_means[cls]
-                        self.inv_cov = self.class_inv_covs[cls]
-                        dist = self.predict(feat.unsqueeze(0)).item()
+                    for cls in class_means:
+                        mean    = class_means[cls]
+                        inv_cov = class_inv_covs[cls]
+                        dist = self.predict(feat.unsqueeze(0), mean, inv_cov).item()
+                        
 
                         if np.isnan(dist) or np.isinf(dist) or dist > 1e5:
                             continue
@@ -666,13 +662,14 @@ class MahalanobisFilter:
                     batch_min_distances.append(best_dist if best_cls is not None else float('inf'))
                     batch_assigned_classes.append(best_cls)
 
-                support_set_distances = torch.tensor(batch_min_distances)
+                batch_distances = torch.tensor(batch_min_distances)
                 if batch_num == 0:
-                    distances_all        = support_set_distances
-                    assigned_classes_all = batch_assigned_classes
+                    distances_all        = batch_distances
+                    assigned_class = batch_assigned_classes
                 else:
-                    distances_all        = torch.cat((distances_all, support_set_distances), 0)
-                    assigned_classes_all += batch_assigned_classes
+                    distances_all        = torch.cat((distances_all, batch_distances), 0)
+                    assigned_class += batch_assigned_classes
+                    
 
         # ─────────────────────────────────────────────────────────────────
         # PASO 4: Filtrar propuestas por threshold y construir resultados
@@ -683,17 +680,16 @@ class MahalanobisFilter:
         results = []
 
         for index, score in enumerate(scores):
-            print("Flujo Multiclass E ", self.is_single_class)
             if self.is_single_class:
                 limit    = self.threshold
                 cat_id   = 1
                 accepted = score.item() <= limit
             else:
-                cls = assigned_classes_all[index]
+                cls = assigned_class[index]
                 if cls is None:
                     continue
-                limit    = self.class_thresholds[cls]
-                cat_id   = self.cls_to_category_id[cls]  # mapeo 0-indexed → COCO id
+                limit    = class_thresholds[cls]
+                cat_id   = cls_to_category_id[cls]  # mapeo 0-indexed → COCO id
                 accepted = score.item() <= limit
 
             if accepted:

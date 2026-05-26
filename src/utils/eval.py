@@ -279,6 +279,17 @@ def eval_sam(coco_gt, image_ids, pred_json_path, output_root, method="xyz", numb
     if len(pred_data) == 0:
         print(f"ADVERTENCIA eval_sam: archivo vacío, se omite evaluación.")
         return
+    with open(pred_json_path, "r") as f:
+        preds = json.load(f)
+
+    pred_ids = set([x["image_id"] for x in preds])
+    gt_ids   = set(coco_gt.getImgIds())
+
+    print("Pred ids sample:", list(pred_ids)[:10])
+    print("GT ids sample:", list(gt_ids)[:10])
+
+    print("Extra pred ids:")
+    print(pred_ids - gt_ids)
     coco_pred = coco_gt.loadRes(pred_json_path)
     # run COCO evaluation
     print('BBox')

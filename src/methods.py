@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import warnings
+from zipfile import Path
 import torch
 import cv2
 import os
@@ -486,6 +487,8 @@ def mahalanobis_filter(args, is_single_class=True, output_root=None, dim_red="sv
         n_components=args.n_components
     )
     print("Flujo multiclass C ", args.multiclass)
+    
+    from utils.visualize_detections import visualize_gt, visualize_proposals
 
     # run filter using the backbone, sam, and ood
     mahalanobis_filter.run_filter(
@@ -493,6 +496,36 @@ def mahalanobis_filter(args, is_single_class=True, output_root=None, dim_red="sv
         dir_filtered_root=output_root,
         mahalanobis_method=mahalanobis_method, beta=beta, seed=args.seed,
         lambda_mahalanobis=args.mahalanobis_lambda
+    )
+    
+
+    # ── Visualización GT ──────────────────────────────────────────────
+    img_dir = f"{args.root}/train2017"
+    visualize_gt(
+        dataloader   = test_loader,
+        img_dir      = img_dir,
+        output_root  = output_root,
+        gt_json_path = f"{output_root}/test.json"
+    )
+    visualize_gt(
+        dataloader   = validation_loader,
+        img_dir      = img_dir,
+        output_root  = output_root,
+        gt_json_path = f"{output_root}/validation.json"
+    )
+    # ── Visualización propuestas test ─────────────────────────────────
+    visualize_proposals(
+        results_json = f"{output_root}/bbox_results.json",
+        gt_json      = f"{output_root}/test.json",
+        img_dir      = img_dir,
+        output_root  = output_root
+    )
+    # ── Visualización propuestas validación ───────────────────────────
+    visualize_proposals(
+        results_json = f"{output_root}/bbox_results_val.json",
+        gt_json      = f"{output_root}/validation.json",
+        img_dir      = img_dir,
+        output_root  = output_root
     )
 
     # STEP 3: evaluate results

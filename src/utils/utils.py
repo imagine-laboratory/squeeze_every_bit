@@ -131,12 +131,15 @@ def save_loader_to_json(unlabeled_loader, output_root, filename=None):
 
     # get gt
     img_ids = []
+    loader_img_ids = []
     categories = []
     bboxes = []
     annotations = []
     id_count = 0
     # get all information from the batch 
     for batch in unlabeled_loader:
+        for idx in range(batch[1]['img_idx'].numel()):
+            loader_img_ids.append(batch[1]['img_orig_id'][idx].item())
         (
             im, ca, bb
         ) = get_groundtruth(batch)
@@ -168,11 +171,10 @@ def save_loader_to_json(unlabeled_loader, output_root, filename=None):
 
     # keep only the imgs I need
     #--------------------------
-    img_ids_from_anns = [i['image_id'] for i in gt_json['annotations']]
-    img_ids_from_anns = list(set(img_ids_from_anns)) # unique elements
+    img_ids_from_loader = set(loader_img_ids)
     images_res = []
     for img_node in gt_json['images']:
-        if img_node['id'] in img_ids_from_anns:
+        if img_node['id'] in img_ids_from_loader:
             images_res.append(img_node)
     
     gt_json['images'] = images_res
@@ -185,7 +187,8 @@ def save_loader_to_json(unlabeled_loader, output_root, filename=None):
         os.remove(gt_file)
     print(f"DEBUG save_loader: primeras 3 annotations = {annotations[:3]}")
     print(f"DEBUG save_loader: categories en gt_json = {gt_json['categories']}")
-    print(f"DEBUG: img_ids que llegan al loader = {sorted(set(img_ids))}")
+    print(f"DEBUG: img_ids con anotaciones = {sorted(set(img_ids))}")
+    print(f"DEBUG: img_ids que llegan al loader = {sorted(img_ids_from_loader)}")
     print(f"DEBUG: img_ids que quedan en test.json = {sorted([i['id'] for i in gt_json['images']])}")
     print(f"DEBUG: ¿está 472 en img_ids? {472 in img_ids}")
     print(f"DEBUG: ¿está 472 en gt_json images? {any(i['id'] == 472 for i in gt_json['images'])}")
