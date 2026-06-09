@@ -536,40 +536,14 @@ def mahalanobis_filter(args, is_single_class=True, output_root=None, dim_red="sv
     print("Ruta del GT:", gt_eval_path)
     coco_gt    = COCO(gt_eval_path)
     image_ids  = coco_gt.getImgIds()[:MAX_IMAGES]
-    res_data   = f"{output_root}/bbox_results.json"
-    print("Ruta del RES:", res_data)
-
     res_data = f"{output_root}/bbox_results.json"
-    print(f"DEBUG: archivo bbox_results.json modificado = {os.path.getmtime(res_data)}")
-    print(f"DEBUG: tamaño = {os.path.getsize(res_data)} bytes")
-    with open(res_data) as f:
-        preds = json.load(f)
-    pred_img_ids = set(p['image_id'] for p in preds)
-
-    with open(gt_eval_path) as f:
-        gt = json.load(f)
-
+    print("Ruta del RES:", res_data)
 
 
     gt_eval_path    = f"{output_root}/validation.json"
     coco_eval_gt    = COCO(gt_eval_path)
     image_eval_ids  = coco_eval_gt.getImgIds()[:MAX_IMAGES]
     res_eval_data   = f"{output_root}/bbox_results_val.json"
-
-    # AGREGA ESTO:
-    with open(gt_eval_path) as f:
-        val_gt = json.load(f)
-    print(f"DEBUG val: imágenes en validation.json = {len(val_gt['images'])}")
-    print(f"DEBUG val: anotaciones en validation.json = {len(val_gt['annotations'])}")
-    print(f"DEBUG val: image_eval_ids = {image_eval_ids}")
-
-    with open(res_eval_data) as f:
-        val_preds = json.load(f)
-    print(f"DEBUG val: predicciones en bbox_results_val.json = {len(val_preds)}")
-
-
-
-
 
     eval_sam(coco_gt, image_ids, res_data, output_root, method=args.method)
 
