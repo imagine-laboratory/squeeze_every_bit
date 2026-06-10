@@ -154,79 +154,65 @@ def create_dataset(name, root, splits=('train', 'val'), use_semi_split=False, se
     datasets = list(datasets.values())
     return datasets if len(datasets) > 1 else datasets[0]
 
-def _sample_balanced_labeled(annotations, all_image_ids, n_labeled, rng):
+def _sample_balanced_subset(annotations, candidate_ids, n_samples, rng, label="subset"):
     """
-    Selecciona imágenes del labeled set garantizando cobertura balanceada por clase.
-    
-    Estrategia en dos fases:
-      Fase 1 — Stratified sampling: selecciona floor(n_labeled / n_classes) imágenes
-               por clase, garantizando que todas las clases tengan representación.
-      Fase 2 — Completar: si quedan cupos disponibles después de la fase 1,
-               se rellenan aleatoriamente con imágenes restantes sin restricción de clase.
+    Selecciona n_samples imágenes de candidate_ids con distribución
+    balanceada por clase. Mismo algoritmo que sample_balanced_labeled
+    pero opera sobre un pool arbitrario de candidatos.
 
     Params:
-        annotations   (list[dict]) : lista de anotaciones COCO con 'image_id' y 'category_id'.
-        all_image_ids (list[int])  : todos los image_id disponibles en el dataset.
-        n_labeled     (int)        : número total de imágenes a seleccionar.
-        rng           (Random)     : instancia de random con seed fijo para reproducibilidad.
+        annotations   (list[dict]): anotaciones COCO con 'image_id' y 'category_id'.
+        candidate_ids (list[int]) : pool de image_id disponibles para este subset.
+        n_samples     (int)       : número de imágenes a seleccionar.
+        rng           (Random)    : instancia de random con seed fijo.
+        label         (str)       : nombre del subset para prints de debug.
 
     Returns:
-        list[int]: lista de image_id seleccionados con cobertura balanceada por clase.
+        list[int]: image_ids seleccionados.
     """
-    # Convertir a set para búsquedas O(1) en lugar de O(n)
-    all_image_ids_set = set(all_image_ids)
+    candidate_set = set(candidate_ids)
 
-    # Construir mapa clase → imágenes disponibles en un solo pase sobre las anotaciones.
-    # Cada image_id se añade al set de su clase (set evita duplicados si hay
-    # múltiples anotaciones de la misma clase en la misma imagen).
+    # Construir mapa clase → imágenes disponibles dentro del pool
     class_to_imgs = {}
     for ann in annotations:
         img_id = ann['image_id']
-        # Ignorar anotaciones de imágenes fuera del pool disponible
-        if img_id not in all_image_ids_set:
+        if img_id not in candidate_set:
             continue
         cat_id = ann['category_id']
         if cat_id not in class_to_imgs:
             class_to_imgs[cat_id] = set()
-        # Añadir la imagen al set de su clase (sin duplicados)
         class_to_imgs[cat_id].add(img_id)
 
-    # Convertir sets a listas para poder usar rng.sample
-    class_to_imgs   = {cls: list(imgs) for cls, imgs in class_to_imgs.items()}
-    unique_classes  = sorted(class_to_imgs.keys())
-    n_classes       = len(unique_classes)
-    imgs_per_class  = max(1, n_labeled // n_classes)
+    class_to_imgs  = {cls: list(imgs) for cls, imgs in class_to_imgs.items()}
+    unique_classes = sorted(class_to_imgs.keys())
+    n_classes      = len(unique_classes)
+    imgs_per_class = max(1, n_samples // n_classes)
 
-    print(f"  [balanced_sample] {n_classes} clases detectadas, objetivo: {imgs_per_class} imgs/clase")
-    print(f"  [balanced_sample] Clases disponibles: {unique_classes}")
+    print(f"  [balanced_{label}] {n_classes} clases, objetivo: {imgs_per_class} imgs/clase")
 
     selected = set()
 
-    # Fase 1: seleccionar imgs_per_class imágenes por cada clase.
-    # En cada iteración se excluyen imágenes ya seleccionadas para evitar
-    # que una imagen con múltiples clases cuente doble.
+    # Fase 1: estratificado por clase
     for cls in unique_classes:
-        # Excluir imágenes ya asignadas a otras clases en iteraciones anteriores
         available = [i for i in class_to_imgs[cls] if i not in selected]
         k = min(imgs_per_class, len(available))
         if k > 0:
             chosen = rng.sample(available, k=k)
             selected.update(chosen)
-            print(f"  [balanced_sample] Clase {cls}: {k} imágenes seleccionadas")
+            print(f"  [balanced_{label}] Clase {cls}: {k} imgs")
         else:
-            print(f"  [balanced_sample] ADVERTENCIA clase {cls}: sin imágenes disponibles")
+            print(f"  [balanced_{label}] ADVERTENCIA clase {cls}: sin imgs disponibles")
 
-    # Fase 2: completar hasta n_labeled con imágenes aleatorias no seleccionadas.
-    # Esto ocurre cuando n_labeled > n_classes * imgs_per_class (cupos sobrantes).
-    remaining    = [i for i in all_image_ids if i not in selected]
-    extra_needed = n_labeled - len(selected)
+    # Fase 2: completar si faltan cupos
+    remaining    = [i for i in candidate_ids if i not in selected]
+    extra_needed = n_samples - len(selected)
     if extra_needed > 0 and len(remaining) > 0:
         extra = rng.sample(remaining, k=min(extra_needed, len(remaining)))
         selected.update(extra)
-        print(f"  [balanced_sample] +{len(extra)} imágenes extra para completar {n_labeled}")
+        print(f"  [balanced_{label}] +{len(extra)} imgs extra")
 
     result = list(selected)
-    print(f"  [balanced_sample] Total seleccionadas: {len(result)} imágenes")
+    print(f"  [balanced_{label}] Total: {len(result)} imgs")
     return result
 
 # ── Rama multiclase: sampling balanceado por clase ──────────
@@ -358,17 +344,27 @@ def create_dataset_ood(name, root, splits=('train'),
                         # ───────────────────────────────────────────────────────────
 
                     # El resto del split es igual para ambas ramas
-                    not_labeled_idx  = [i for i in ids if i not in labeled_idx]
-                    pool_size        = unlabeled_samples + validation_samples
-                    remaining_pool   = rng.sample(
-                        not_labeled_idx,
-                        k=min(pool_size, len(not_labeled_idx))
+                    not_labeled_idx = [i for i in ids if i not in labeled_idx]
+
+                    # Balancear test
+                    test_idx = _sample_balanced_subset(
+                        annotations  = new_labeled['annotations'],
+                        candidate_ids= not_labeled_idx,
+                        n_samples    = unlabeled_samples,
+                        rng          = rng,
+                        label        = "test"
                     )
-                    validation_idx = rng.sample(
-                        remaining_pool,
-                        k=min(validation_samples, len(remaining_pool))
+
+                    # Balancear validación (del pool restante después de test)
+                    remaining_after_test = [i for i in not_labeled_idx if i not in test_idx]
+                    validation_idx = _sample_balanced_subset(
+                        annotations  = new_labeled['annotations'],
+                        candidate_ids= remaining_after_test,
+                        n_samples    = validation_samples,
+                        rng          = rng,
+                        label        = "validation"
                     )
-                    test_idx         = [i for i in remaining_pool if i not in validation_idx]
+                    #test_idx         = [i for i in remaining_pool if i not in validation_idx]
                     full_labeled_idx = [i for i in ids if i not in test_idx]
                     unlabeled_idx    = [i for i in full_labeled_idx if i not in labeled_idx]
 

@@ -165,9 +165,11 @@ class MahalanobisFilter:
         """
         
         covariance_matrix     = self.estimate_covariance(support_set)
+        inv_support_cov = torch.pinverse(covariance_matrix)
+        
         if context_features != None:
             context_covariance_matrix = self.estimate_covariance(context_features)
-
+            inv_context_cov = torch.pinverse(context_covariance_matrix)
 
         # Lambda automático: más samples → más peso al support set
         if lambda_mahalanobis == -1.0:
@@ -176,10 +178,10 @@ class MahalanobisFilter:
             lambda_k_tau = lambda_mahalanobis
             
         inv_cov = (
-                (lambda_k_tau       * covariance_matrix)  +
-                ((1 - lambda_k_tau) * context_covariance_matrix) +
-                (beta               * torch.eye(support_set.size(1), support_set.size(1)))
-            ) # Calcular la inversa en general (como danny lo hizo) y a su vez como está el paper
+            (lambda_k_tau       * inv_support_cov) +
+            ((1 - lambda_k_tau) * inv_context_cov) +
+            (beta               * torch.eye(support_set.size(1), support_set.size(1)))
+        )
 
         if self.is_positive_definite(inv_cov):
             print("The matrix is positive definite.")
