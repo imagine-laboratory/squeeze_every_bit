@@ -239,6 +239,85 @@ class MahalanobisFilter:
         #print("Mean predicted:", mean_value)
         #print("Standard Deviation predicted:", std_deviation)
         return distances
+
+    @staticmethod
+    def _sample_rows(features, max_samples, seed):
+        """Return a deterministic row sample without changing the source."""
+        if features.shape[0] <= max_samples:
+            return features
+
+        indices = random.Random(seed).sample(
+            range(features.shape[0]),
+            max_samples
+        )
+        return features[torch.tensor(indices, dtype=torch.long)]
+
+    @staticmethod
+    def _calibrate_threshold(positive_distances, negative_distances):
+        """
+        Choose a threshold for the rule distance <= threshold.
+
+        The selected threshold maximizes balanced accuracy between samples of
+        the class and negatives formed by other classes plus real background.
+        """
+        positive_distances = np.asarray(positive_distances, dtype=np.float64)
+        negative_distances = np.asarray(negative_distances, dtype=np.float64)
+
+        positive_distances = positive_distances[np.isfinite(positive_distances)]
+        negative_distances = negative_distances[np.isfinite(negative_distances)]
+
+        if positive_distances.size == 0:
+            raise RuntimeError(
+                "No hay distancias positivas validas para calibrar el threshold."
+            )
+
+        if negative_distances.size == 0:
+            q1 = np.percentile(positive_distances, 25)
+            q3 = np.percentile(positive_distances, 75)
+            threshold = q3 + 1.5 * (q3 - q1)
+            return float(threshold), {
+                "true_positive_rate": 1.0,
+                "false_positive_rate": None,
+                "balanced_accuracy": None,
+            }
+
+        candidates = np.unique(np.concatenate([
+            positive_distances,
+            negative_distances,
+        ]))
+        best = None
+
+        for threshold in candidates:
+            true_positive_rate = float(
+                np.mean(positive_distances <= threshold)
+            )
+            false_positive_rate = float(
+                np.mean(negative_distances <= threshold)
+            )
+            balanced_accuracy = 0.5 * (
+                true_positive_rate + 1.0 - false_positive_rate
+            )
+            rank = (
+                balanced_accuracy,
+                true_positive_rate,
+                -false_positive_rate,
+                -float(threshold),
+            )
+
+            if best is None or rank > best["rank"]:
+                best = {
+                    "rank": rank,
+                    "threshold": float(threshold),
+                    "true_positive_rate": true_positive_rate,
+                    "false_positive_rate": false_positive_rate,
+                    "balanced_accuracy": balanced_accuracy,
+                }
+
+        return best["threshold"], {
+            "true_positive_rate": best["true_positive_rate"],
+            "false_positive_rate": best["false_positive_rate"],
+            "balanced_accuracy": best["balanced_accuracy"],
+        }
     
     def fit_svd(self, x, n_components=10):
         self.svd = TruncatedSVD(n_components=n_components)
@@ -294,6 +373,9 @@ class MahalanobisFilter:
         labeled_labels = []
         back_imgs_context  = []
         back_label_context = []
+        selective_search = None
+        if get_background_samples:
+            selective_search = cv2.ximgproc.segmentation.createSelectiveSearchSegmentation()
 
         for (batch_num, batch) in tqdm(
             enumerate(labeled_loader), total=len(labeled_loader), desc="Extract labeled images"
@@ -316,10 +398,9 @@ class MahalanobisFilter:
                 # Solo en single-class: obtener background como clase negativa
                 # get_background usa Selective Search para proponer regiones
                 # que no se solapan con los GT boxes → clase negativa
-                if get_background_samples and self.is_single_class:
-                    ss = cv2.ximgproc.segmentation.createSelectiveSearchSegmentation()
+                if selective_search is not None:
                     imgs_b, labels_b = get_background(
-                        batch, idx, self.trans_norm, ss,
+                        batch, idx, self.trans_norm, selective_search,
                         num_classes, self.use_sam_embeddings
                     )
                     back_imgs_context  += imgs_b
@@ -338,6 +419,16 @@ class MahalanobisFilter:
         all_labeled_features = self.get_all_features(labeled_imgs)
         print(f"Flow3: featuresV de {len(all_labeled_features)} crops labeled")
 
+        if len(back_imgs_context) > 512:
+            back_imgs_context = random.Random(seed).sample(
+                back_imgs_context, 512
+            )
+        all_background_features = self.get_all_features(back_imgs_context)
+        print(
+            f"Flow3.1: features de background = "
+            f"{len(all_background_features)} crops"
+        )
+
         # ─────────────────────────────────────────────────────────────────
         # PASO 3: Construir contexto y features totales según el modo
         #
@@ -352,19 +443,26 @@ class MahalanobisFilter:
         #   - labels             = preserva el category_id real de cada crop
         # ─────────────────────────────────────────────────────────────────
         if self.is_single_class:
-            if len(back_imgs_context) > 512:
-                back_imgs_context = random.Random(seed).sample(back_imgs_context, 512)
-            all_background_features = self.get_all_features(back_imgs_context)
-            all_context_features = all_labeled_features + random.Random(seed).sample(
-                all_background_features, len(all_labeled_features)
+            background_count = min(
+                len(all_background_features),
+                len(all_labeled_features)
             )
+            sampled_background = random.Random(seed).sample(
+                all_background_features,
+                background_count
+            )
+            all_context_features = all_labeled_features + sampled_background
             all_features = all_labeled_features + all_background_features
             # En single-class todos los foreground son clase 0
             labels = np.zeros(len(all_labeled_features))
         else:
-            all_background_features = []
-            all_context_features    = all_labeled_features
-            all_features            = all_labeled_features
+            if len(all_background_features) < 2:
+                raise RuntimeError(
+                    "Mahalanobis multiclass con rechazo necesita al menos "
+                    "dos crops de background del support set."
+                )
+            all_context_features = all_background_features
+            all_features = all_labeled_features + all_background_features
             # En multiclase preservar los labels reales (0-indexed)
             labels = np.array(labels)
 
@@ -387,10 +485,18 @@ class MahalanobisFilter:
             distances = self.predict(all_labeled_features)
 
         else:
-            distances, means, inv_covs, thresholds, cls_to_category_id, all_svd = self._fit_multiclass(
+            (
+                distances,
+                means,
+                inv_covs,
+                thresholds,
+                cls_to_category_id,
+                all_svd,
+                calibration,
+            ) = self._fit_multiclass(
                 all_features, all_labeled_features, all_context_features,
                 labels, labeled_labels,
-                mahalanobis_method, beta, lambda_mahalanobis
+                mahalanobis_method, beta, lambda_mahalanobis, seed
             )
 
         # ─────────────────────────────────────────────────────────────────
@@ -420,6 +526,12 @@ class MahalanobisFilter:
                     "max_distance"           : float(np.max(distances[cls])),
                     "positive_definite"      : bool(self.is_positive_definite(inv_covs[cls])),
                     "semi_positive_definite" : bool(self.is_positive_semidefinite(inv_covs[cls])),
+                    "positive_samples"       : int(calibration[cls]["positive_samples"]),
+                    "negative_samples"       : int(calibration[cls]["negative_samples"]),
+                    "background_samples"     : int(calibration[cls]["background_samples"]),
+                    "true_positive_rate"     : calibration[cls]["true_positive_rate"],
+                    "false_positive_rate"    : calibration[cls]["false_positive_rate"],
+                    "balanced_accuracy"      : calibration[cls]["balanced_accuracy"],
                 }
             stats_count["classes"] = per_class_stats                        
 
@@ -435,7 +547,7 @@ class MahalanobisFilter:
 
     def _fit_multiclass(self, all_features, all_labeled_features, all_context_features,
                         labels, labeled_labels,
-                        mahalanobis_method, beta, lambda_mahalanobis):
+                        mahalanobis_method, beta, lambda_mahalanobis, seed):
         """
         Ajusta una distribución Mahalanobis independiente por cada clase.
         Aplica una reducción de dimensionalidad compartida y estima media,
@@ -460,9 +572,11 @@ class MahalanobisFilter:
         if self.dim_red == DimensionalityReductionMethod.SVD:
             self.fit_svd(all_features.detach().numpy(), n_components=self.n_components)
             all_labeled_features = torch.Tensor(self.svd.transform(all_labeled_features.detach().numpy()))
+            all_context_features = torch.Tensor(self.svd.transform(all_context_features.detach().numpy()))
         elif self.dim_red == DimensionalityReductionMethod.PCA:
             self.fit_pca(all_features.detach().numpy(), n_components=self.n_components)
             all_labeled_features = torch.Tensor(self.pca.transform(all_labeled_features.detach().numpy()))
+            all_context_features = torch.Tensor(self.pca.transform(all_context_features.detach().numpy()))
 
         # Inicializar estructuras por clase
         threshold      = float('inf')  # no hay un threshold global en multiclase
@@ -470,6 +584,7 @@ class MahalanobisFilter:
         class_inv_covs   = {}           # covarianza inversa por clase
         class_thresholds = {}           # threshold IQR por clase
         class_distances = {}
+        class_calibration = {}
         
         unique_classes = np.unique(labels)        
 
@@ -497,12 +612,41 @@ class MahalanobisFilter:
                 continue
             
             cls_mean = torch.mean(cls_features, axis=0)
+            other_class_parts = []
+            per_class_limit = cls_features.shape[0]
+
+            # Balance one-vs-rest negatives so a frequent class cannot
+            # dominate the context only because it has more annotations.
+            for other_cls in unique_classes:
+                if other_cls == cls:
+                    continue
+                other_cls_features = all_labeled_features[labels == other_cls]
+                other_class_parts.append(self._sample_rows(
+                    other_cls_features,
+                    per_class_limit,
+                    seed + int(cls) * 1000 + int(other_cls)
+                ))
+
+            other_features = torch.cat(other_class_parts, dim=0)
+            background_limit = max(
+                cls_features.shape[0],
+                other_features.shape[0]
+            )
+            background_features = self._sample_rows(
+                all_context_features,
+                background_limit,
+                seed + int(cls) * 1000 + 999
+            )
+            
+            negative_features = torch.cat([
+                other_features,
+                background_features,
+            ], dim=0)
 
             if mahalanobis_method == "regularization":
                 # Contexto = features de TODAS las otras clases
                 # Esto permite que la covarianza de cada clase sea contrastiva
-                other_features = all_labeled_features[~cls_mask]
-                context = other_features if other_features.shape[0] >= 2 else all_context_features
+                context = negative_features
                 print(f"Flow7: contexto para clase {cls} → {context.shape[0]} samples")
 
                 # fit_regularization: estima self.mean y self.inv_cov para cls_features
@@ -534,19 +678,37 @@ class MahalanobisFilter:
             # predict: calcula distancia Mahalanobis usando self.mean y self.inv_cov
             self.crr_cls_print = cls
             cls_distance = self.predict(cls_features, cls_mean, cls_inv_cov).numpy()
+            negative_distance = self.predict(
+                negative_features, cls_mean, cls_inv_cov
+            ).numpy()
             class_distances[cls] = cls_distance
 
-            if np.isnan(cls_distance).any() or np.isinf(cls_distance).any():
+            if (
+                np.isnan(cls_distance).any()
+                or np.isinf(cls_distance).any()
+                or np.isnan(negative_distance).any()
+                or np.isinf(negative_distance).any()
+            ):
                 print(f"ADVERTENCIA: clase {cls} → distancias inválidas, se omite.")
                 del class_means[cls]
                 del class_inv_covs[cls]
                 continue
 
-            # Threshold por clase usando criterio de Tukey (Q3 + 1.5*IQR)
-            Q1  = np.percentile(cls_distance, 25)
-            Q3  = np.percentile(cls_distance, 75)
-            IQR = Q3 - Q1
-            class_thresholds[cls] = Q3 + 1.5 * IQR
+            threshold, calibration = self._calibrate_threshold(
+                cls_distance, negative_distance
+            )
+            class_thresholds[cls] = threshold
+            class_calibration[cls] = {
+                **calibration,
+                "positive_samples": int(cls_features.shape[0]),
+                "negative_samples": int(negative_features.shape[0]),
+                "background_samples": int(background_features.shape[0]),
+            }
+            print(
+                f"Flow8: clase {cls} threshold={threshold:.4f}, "
+                f"TPR={calibration['true_positive_rate']:.4f}, "
+                f"FPR={calibration['false_positive_rate']:.4f}"
+            )
             
         
         print(f"|===============Flow10: resultados finales por clase de fit===============")
@@ -560,7 +722,15 @@ class MahalanobisFilter:
                 f"Necesitas >= 2 samples por clase."
             )
 
-        return class_distances, class_means, class_inv_covs, class_thresholds, cls_to_category_id, all_labeled_features
+        return (
+            class_distances,
+            class_means,
+            class_inv_covs,
+            class_thresholds,
+            cls_to_category_id,
+            all_labeled_features,
+            class_calibration,
+        )
 
     def evaluate(self, dataloader, dir_filtered_root, result_name, class_means=None, class_inv_covs=None, class_thresholds=None, cls_to_category_id=None):
         """
@@ -586,6 +756,7 @@ class MahalanobisFilter:
 
         # En multiclase también acumulamos la clase asignada a cada propuesta
         assigned_class = []
+        assigned_confidence = []
 
         # ─────────────────────────────────────────────────────────────────
         # PASO 1: Iterar el dataloader y generar propuestas SAM
@@ -641,10 +812,10 @@ class MahalanobisFilter:
             else:
                 batch_min_distances    = []
                 batch_assigned_classes = []
+                batch_confidences      = []
 
                 for feat in featuremaps:
-                    best_cls  = None
-                    best_dist = float('inf')
+                    accepted_candidates = []
 
                     # Por cada clase entrenada: calcular distancia Mahalanobis
                     # usando los parámetros específicos de esa clase
@@ -657,20 +828,40 @@ class MahalanobisFilter:
 
                         if np.isnan(dist) or np.isinf(dist) or dist > 1e5:
                             continue
-                        if dist < best_dist:
-                            best_dist = dist
-                            best_cls  = cls
+                        threshold = class_thresholds[cls]
+                        if threshold <= 0:
+                            continue
+
+                        normalized_distance = dist / threshold
+                        if normalized_distance <= 1.0:
+                            accepted_candidates.append(
+                                (normalized_distance, dist, cls)
+                            )
+
+                    if accepted_candidates:
+                        best_normalized, best_dist, best_cls = min(
+                            accepted_candidates,
+                            key=lambda candidate: candidate[0]
+                        )
+                        confidence = max(0.0, 1.0 - best_normalized)
+                    else:
+                        best_dist = float('inf')
+                        best_cls = None
+                        confidence = 0.0
 
                     batch_min_distances.append(best_dist if best_cls is not None else float('inf'))
                     batch_assigned_classes.append(best_cls)
+                    batch_confidences.append(confidence)
 
                 batch_distances = torch.tensor(batch_min_distances)
                 if batch_num == 0:
                     distances_all        = batch_distances
                     assigned_class = batch_assigned_classes
+                    assigned_confidence = batch_confidences
                 else:
                     distances_all        = torch.cat((distances_all, batch_distances), 0)
                     assigned_class += batch_assigned_classes
+                    assigned_confidence += batch_confidences
                     
 
         # ─────────────────────────────────────────────────────────────────
@@ -690,15 +881,17 @@ class MahalanobisFilter:
                 cls = assigned_class[index]
                 if cls is None:
                     continue
-                limit    = class_thresholds[cls]
                 cat_id   = cls_to_category_id[cls]  # mapeo 0-indexed → COCO id
-                accepted = score.item() <= limit
+                accepted = True
 
             if accepted:
+                result_score = imgs_scores[index]
+                if not self.is_single_class:
+                    result_score *= assigned_confidence[index]
                 results.append({
                     'image_id'   : imgs_ids[index],
                     'category_id': cat_id,
-                    'score'      : imgs_scores[index],
+                    'score'      : result_score,
                     'bbox'       : imgs_box_coords[index],
                 })
 
