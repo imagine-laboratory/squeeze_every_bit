@@ -317,6 +317,7 @@ Results are reported as **mean ± standard deviation**.
 ## 📖 Citation
 
 If you find this repository useful, please star ⭐ the repository and cite:
+
 <a href="10.1109/CLEI67442.2025.11420556">Squeeze Every Bit of Insight: Leveraging Few-shot Models with a Compact Support Set for Domain Transfer in Object Detection from Pineapple Fields</a> [<b>bib</b>]
 
 ```bibtex
